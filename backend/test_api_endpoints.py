@@ -22,7 +22,7 @@ class TestApiEndpoints(unittest.TestCase):
         self.assertTrue(data["ok"])
         self.assertEqual(data["subject"], "Mathematics")
         self.assertEqual(data["symbolic_engine"], "SymPy 1.14.0")
-        self.assertEqual(data["model"], "gemini-2.5-flash")
+        self.assertIn(data["model"], ["gemini-3.8-flash", "gemini-2.5-flash"])
 
     def test_teacher_login(self):
         res = self.client.post("/api/auth/login", json={"email": "teacher@evalai.edu", "password": "teacher123"})
@@ -167,6 +167,133 @@ class TestApiEndpoints(unittest.TestCase):
             }
         )
         self.assertIn(res.status_code, [400, 422])
+
+    def test_teacher_registration_code_guard(self):
+        # 1. Attempt teacher registration without code -> 403
+        bad_res1 = self.client.post("/api/auth/register", json={
+            "email": "intruder_teacher1@evalai.edu",
+            "password": "pass12345Password",
+            "full_name": "Intruder Teacher",
+            "role": "teacher"
+        })
+        self.assertEqual(bad_res1.status_code, 403)
+        self.assertIn("Valid teacher authorization code is required", bad_res1.json()["detail"])
+
+        # 2. Attempt teacher registration with wrong code -> 403
+        bad_res2 = self.client.post("/api/auth/register", json={
+            "email": "intruder_teacher2@evalai.edu",
+            "password": "pass12345Password",
+            "full_name": "Intruder Teacher",
+            "role": "teacher",
+            "teacher_code": "INVALID-CODE"
+        })
+        self.assertEqual(bad_res2.status_code, 403)
+
+        # 3. Valid teacher code -> 200 and teacher role granted
+        good_res = self.client.post("/api/auth/register", json={
+            "email": "valid_teacher@evalai.edu",
+            "password": "pass12345Password",
+            "full_name": "Verified Teacher",
+            "role": "teacher",
+            "teacher_code": "EVALAI-TEACHER-2026"
+        })
+        self.assertEqual(good_res.status_code, 200)
+        self.assertEqual(good_res.json()["user"]["role"], "teacher")
+
+    def test_demo_reset_auth_guard(self):
+        # 1. Anonymous user cannot reset demo
+        res_anon = self.client.post("/api/demo/reset")
+        self.assertEqual(res_anon.status_code, 401)
+
+        # 2. Student cannot reset demo
+        s_res = self.client.post("/api/auth/login", json={"email": "aarav@evalai.edu", "password": "student123"})
+        s_token = s_res.json()["access_token"]
+        res_student = self.client.post("/api/demo/reset", headers={"Authorization": f"Bearer {s_token}"})
+        self.assertEqual(res_student.status_code, 403)
+
+        # 3. Teacher can reset demo
+        t_res = self.client.post("/api/auth/login", json={"email": "teacher@evalai.edu", "password": "teacher123"})
+        t_token = t_res.json()["access_token"]
+        res_teacher = self.client.post("/api/demo/reset", headers={"Authorization": f"Bearer {t_token}"})
+        self.assertEqual(res_teacher.status_code, 200)
+        self.assertTrue(res_teacher.json()["ok"])
+
+    def test_storage_file_authorization(self):
+        import os
+        # 1. Anonymous download attempt -> 401
+        res_anon = self.client.get("/api/storage/nonexistent.pdf")
+        self.assertEqual(res_anon.status_code, 401)
+
+        # 2. Student Aarav attempts to download Rohan's test sheet -> 403
+        storage_dir = os.path.join(os.path.dirname(__file__), "storage")
+        os.makedirs(storage_dir, exist_ok=True)
+        test_file = os.path.join(storage_dir, "rohan_test_sheet.pdf")
+        with open(test_file, "wb") as f:
+            f.write(b"%PDF-1.4 sample content")
+
+        try:
+            s_res = self.client.post("/api/auth/login", json={"email": "aarav@evalai.edu", "password": "student123"})
+            s_token = s_res.json()["access_token"]
+            res_cross = self.client.get(
+                "/api/storage/rohan_test_sheet.pdf",
+                headers={"Authorization": f"Bearer {s_token}"}
+            )
+            self.assertEqual(res_cross.status_code, 403)
+            self.assertIn("Access denied", res_cross.json()["detail"])
+        finally:
+            if os.path.exists(test_file):
+                os.remove(test_file)
+
+    def test_magic_bytes_file_validation(self):
+        t_res = self.client.post("/api/auth/login", json={"email": "teacher@evalai.edu", "password": "teacher123"})
+        t_token = t_res.json()["access_token"]
+        headers = {"Authorization": f"Bearer {t_token}"}
+
+        # Upload a file with .pdf extension but plain text content (not %PDF magic bytes)
+        fake_pdf = io.BytesIO(b"NOT A REAL PDF FILE CONTENT AT ALL")
+        valid_pdf1 = io.BytesIO(b"%PDF-1.4 test")
+        valid_pdf2 = io.BytesIO(b"%PDF-1.4 test")
+
+        res = self.client.post(
+            "/api/teacher/evaluate-three-files",
+            headers=headers,
+            data={"student_id": "s1", "test_title": "Test Title"},
+            files={
+                "question_paper": ("qp.pdf", fake_pdf, "application/pdf"),
+                "answer_key": ("ak.pdf", valid_pdf1, "application/pdf"),
+                "student_sheet": ("ss.pdf", valid_pdf2, "application/pdf")
+            }
+        )
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("not a valid PDF", res.json()["detail"])
+
+    def test_server_side_marks_bounds_validation(self):
+        t_res = self.client.post("/api/auth/login", json={"email": "teacher@evalai.edu", "password": "teacher123"})
+        t_token = t_res.json()["access_token"]
+        headers = {"Authorization": f"Bearer {t_token}"}
+
+        # Fetch eval-3
+        detail_res = self.client.get("/api/teacher/evaluations/eval-3", headers=headers)
+        questions = detail_res.json()["evaluation"]["questions"]
+
+        # 1. Attempt to give 15 marks when max_marks is 5 -> 400
+        questions[0]["final_marks"] = 15.0
+        bad_res = self.client.put(
+            "/api/teacher/evaluations/eval-3/publish",
+            headers=headers,
+            json={"questions": questions, "teacher_comments": "Attempting invalid marks"}
+        )
+        self.assertEqual(bad_res.status_code, 400)
+        self.assertIn("Final marks", bad_res.json()["detail"])
+
+        # 2. Attempt negative marks -> 400
+        questions[0]["final_marks"] = -2.0
+        bad_res2 = self.client.put(
+            "/api/teacher/evaluations/eval-3/publish",
+            headers=headers,
+            json={"questions": questions, "teacher_comments": "Attempting negative marks"}
+        )
+        self.assertEqual(bad_res2.status_code, 400)
 
 if __name__ == "__main__":
     unittest.main()

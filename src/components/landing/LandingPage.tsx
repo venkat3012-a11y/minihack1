@@ -13,6 +13,7 @@ export const LandingPage: React.FC = () => {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [fullName, setFullName] = useState('')
+  const [teacherCode, setTeacherCode] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -35,6 +36,10 @@ export const LandingPage: React.FC = () => {
       setError('Please provide your full name.')
       return
     }
+    if (isRegistering && activePortal === 'teacher' && !teacherCode) {
+      setError('Please enter the Teacher Verification Code to create a teacher account.')
+      return
+    }
 
     setLoading(true)
     setError('')
@@ -44,7 +49,8 @@ export const LandingPage: React.FC = () => {
           email,
           password,
           full_name: fullName,
-          role: activePortal || 'student'
+          role: activePortal || 'student',
+          teacher_code: activePortal === 'teacher' ? teacherCode : undefined
         })
       } else {
         await login(email, password)
@@ -256,6 +262,26 @@ export const LandingPage: React.FC = () => {
                   </button>
                 </div>
               </div>
+
+              {isRegistering && activePortal === 'teacher' && (
+                <div>
+                  <div className="flex items-center justify-between">
+                    <label className="form-label">Teacher Verification Code</label>
+                    <span className="text-[11px] text-slate-400 font-mono">Invite required</span>
+                  </div>
+                  <input
+                    type="text"
+                    required
+                    value={teacherCode}
+                    onChange={e => setTeacherCode(e.target.value)}
+                    placeholder="e.g. EVALAI-TEACHER-2026"
+                    className="form-input font-mono"
+                  />
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    Prevents unauthorized teacher registrations. Contact administrator if unknown.
+                  </p>
+                </div>
+              )}
 
               <button
                 type="submit"

@@ -235,6 +235,7 @@ export const EvaluationUploader: React.FC = () => {
   }
 
   const totalFinal = editedQuestions.reduce((s, q) => s + Number(q.final_marks || 0), 0)
+  const totalMax = editedQuestions.reduce((s, q) => s + Number(q.max_marks || 0), 0) || (result?.max_score || 0)
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto">
@@ -402,10 +403,10 @@ export const EvaluationUploader: React.FC = () => {
               <div className="text-xs text-slate-400 uppercase font-semibold">Total Proposed / Final Marks</div>
               <div className="flex items-baseline gap-2 mt-1">
                 <span className="text-3xl font-extrabold text-teal-400">{totalFinal.toFixed(1)}</span>
-                <span className="text-slate-400 font-medium">/ {result.max_score} marks</span>
+                <span className="text-slate-400 font-medium">/ {totalMax.toFixed(1)} marks</span>
               </div>
               <div className="text-xs text-slate-300 mt-0.5">
-                {result.max_score > 0 ? Math.round((totalFinal / result.max_score) * 100) : 0}% aggregate
+                {totalMax > 0 ? Math.round((totalFinal / totalMax) * 100) : 0}% aggregate
               </div>
             </div>
           </div>
@@ -488,7 +489,34 @@ export const EvaluationUploader: React.FC = () => {
                         </span>
                       </div>
 
-                      <div className="grid grid-cols-3 gap-2">
+                      <div className="grid grid-cols-4 gap-2">
+                        <div className="col-span-1">
+                          <label className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider block mb-1">
+                            Max Marks
+                          </label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={100}
+                            step={0.5}
+                            value={editedQuestions[idx].max_marks}
+                            onChange={e => {
+                              const newMax = Math.max(0.5, Number(e.target.value))
+                              setEditedQuestions(prev => {
+                                const updated = [...prev]
+                                const curFinal = updated[idx].final_marks
+                                updated[idx] = {
+                                  ...updated[idx],
+                                  max_marks: newMax,
+                                  final_marks: Math.min(curFinal, newMax)
+                                }
+                                return updated
+                              })
+                            }}
+                            className="form-input text-xs py-1"
+                          />
+                        </div>
+
                         <div className="col-span-1">
                           <label className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider block mb-1">
                             Approved Marks
@@ -496,11 +524,11 @@ export const EvaluationUploader: React.FC = () => {
                           <input
                             type="number"
                             min={0}
-                            max={q.max_marks}
+                            max={editedQuestions[idx].max_marks}
                             step={0.5}
                             value={editedQuestions[idx].final_marks}
                             onChange={e => {
-                              const val = Math.min(q.max_marks, Math.max(0, Number(e.target.value)))
+                              const val = Math.min(editedQuestions[idx].max_marks, Math.max(0, Number(e.target.value)))
                               setEditedQuestions(prev => {
                                 const updated = [...prev]
                                 updated[idx] = { ...updated[idx], final_marks: val }

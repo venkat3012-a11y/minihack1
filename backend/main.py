@@ -22,12 +22,15 @@ from auth import (
 from pdf_service import generate_evaluation_pdf
 from gemini_service import (
     is_gemini_configured, get_gemini_config,
-    evaluate_three_files
+    verify_gemini_live_access, evaluate_three_files
 )
 
 # Ensure storage directory exists
 STORAGE_DIR = os.path.join(os.path.dirname(__file__), "storage")
 os.makedirs(STORAGE_DIR, exist_ok=True)
+
+# Secret for teacher self-registration
+TEACHER_INVITE_CODE = os.environ.get("TEACHER_INVITE_CODE", "EVALAI-TEACHER-2026").strip()
 
 # Initialize database on startup
 init_db()
@@ -39,11 +42,21 @@ app = FastAPI(
     version="2.0.0"
 )
 
+# Allowed Origins (Fixed wildcard with credentials vulnerability)
+ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5174",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000"
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -57,7 +70,8 @@ class RegisterRequest(BaseModel):
     email: str
     password: str
     full_name: str
-    role: str # 'teacher' or 'student'
+    role: str = "student" # 'teacher' or 'student'
+    teacher_code: Optional[str] = None
 
 class QuestionUpdateItem(BaseModel):
     question_num: int
@@ -79,6 +93,31 @@ class PublishEvaluationRequest(BaseModel):
     questions: List[QuestionUpdateItem]
     teacher_comments: Optional[str] = ""
 
+# ----------------- File Content Validation ----------------- #
+
+def validate_uploaded_file_content(content: bytes, filename: str, label: str):
+    """
+    Validates file content by inspecting file size and magic bytes (file signature).
+    Supports PDF, JPG, JPEG, and PNG.
+    """
+    if len(content) == 0:
+        raise HTTPException(400, f"{label} is empty (0 bytes).")
+    if len(content) > 30 * 1024 * 1024:
+        raise HTTPException(400, f"{label} exceeds 30MB limit.")
+
+    ext = os.path.splitext(filename)[1].lower()
+    if ext == ".pdf":
+        if not content.startswith(b"%PDF-"):
+            raise HTTPException(400, f"{label} is not a valid PDF file (corrupted or invalid header).")
+    elif ext == ".png":
+        if not content.startswith(b"\x89PNG\r\n\x1a\n"):
+            raise HTTPException(400, f"{label} is not a valid PNG image (corrupted or invalid header).")
+    elif ext in [".jpg", ".jpeg"]:
+        if not (content.startswith(b"\xff\xd8\xff") or content.startswith(b"\xff\xd8")):
+            raise HTTPException(400, f"{label} is not a valid JPEG/JPG image (corrupted or invalid header).")
+    else:
+        raise HTTPException(400, f"Unsupported file type '{ext}' for {label}. Allowed formats: PDF, JPG, JPEG, PNG.")
+
 # ----------------- System & Status ----------------- #
 
 @app.get("/api/health")
@@ -90,7 +129,7 @@ def health():
         "subject": "Mathematics",
         "symbolic_engine": "SymPy 1.14.0",
         "gemini_configured": is_gemini_configured(),
-        "model": cfg.get("model", "gemini-2.5-flash"),
+        "model": cfg.get("model", "gemini-3.8-flash"),
         "database": "SQLite WAL"
     }
 
@@ -99,7 +138,7 @@ def config_status():
     cfg = get_gemini_config()
     return {
         "gemini_active": is_gemini_configured(),
-        "model_name": cfg.get("model", "gemini-2.5-flash"),
+        "model_name": cfg.get("model", "gemini-3.8-flash"),
         "sympy_active": True,
         "ocr_active": True,
         "subject": "Mathematics",
@@ -107,7 +146,8 @@ def config_status():
     }
 
 @app.post("/api/demo/reset")
-def reset_demo():
+def reset_demo(current_user: Dict[str, Any] = Depends(require_teacher)):
+    """Only authenticated teachers can reset demo data."""
     reset_all_data()
     return {"ok": True, "message": "Demo data reset successfully to clean initial state."}
 
@@ -140,21 +180,32 @@ def login(req: LoginRequest):
 def register(req: RegisterRequest):
     conn = get_db()
     c = conn.cursor()
-    
+
     c.execute("SELECT id FROM users WHERE email = ?", (req.email.strip().lower(),))
     if c.fetchone():
         conn.close()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email is already registered")
 
+    # Fix public teacher registration: Require valid teacher invite code
+    if req.role == "teacher":
+        if not req.teacher_code or req.teacher_code.strip() != TEACHER_INVITE_CODE:
+            conn.close()
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Valid teacher authorization code is required to register as a teacher."
+            )
+        role = "teacher"
+    else:
+        role = "student"
+
     user_id = "u-" + uuid.uuid4().hex[:8]
     now = datetime.now().isoformat()
-    role = "student" if req.role != "teacher" else "teacher"
 
     c.execute("""
     INSERT INTO users (id, email, password_hash, full_name, role, created_at)
     VALUES (?, ?, ?, ?, ?, ?)""",
     (user_id, req.email.strip().lower(), hash_password(req.password), req.full_name.strip(), role, now))
-    
+
     conn.commit()
     conn.close()
 
@@ -174,16 +225,34 @@ def register(req: RegisterRequest):
 def get_me(current_user: Dict[str, Any] = Depends(get_current_user)):
     return {"user": current_user}
 
-# ----------------- File Storage & Previews ----------------- #
+# ----------------- Secure File Storage & Previews ----------------- #
 
 @app.get("/api/storage/{filename}")
-def get_storage_file(filename: str):
-    # Prevent directory traversal
+def get_storage_file(filename: str, current_user: Dict[str, Any] = Depends(get_current_user)):
+    """
+    Secure file access:
+    - Teachers can view assessment documents.
+    - Students may ONLY access question papers or their own student sheet for published tests.
+    - Answer keys and other students' submissions are strictly forbidden for students.
+    """
     safe_filename = os.path.basename(filename)
     file_path = os.path.join(STORAGE_DIR, safe_filename)
     if not os.path.exists(file_path):
         raise HTTPException(404, "File not found")
-    
+
+    if current_user["role"] == "student":
+        conn = get_db()
+        c = conn.cursor()
+        c.execute("""
+        SELECT id FROM evaluations
+        WHERE student_id = ? AND status = 'published'
+          AND (question_paper_filename = ? OR student_sheet_filename = ?)
+        """, (current_user["id"], safe_filename, safe_filename))
+        allowed = c.fetchone()
+        conn.close()
+        if not allowed:
+            raise HTTPException(403, "Access denied to requested assessment file.")
+
     mime_type, _ = mimetypes.guess_type(file_path)
     return FileResponse(file_path, media_type=mime_type or "application/octet-stream")
 
@@ -215,9 +284,6 @@ async def evaluate_three_files_endpoint(
     (3) Student Written Test Paper
     Supported formats: PDF, JPG, JPEG, PNG.
     """
-    allowed_exts = {".pdf", ".jpg", ".jpeg", ".png"}
-
-    # Validate that all 3 files are present
     files_map = {
         "Question Paper": question_paper,
         "Teacher Answer Key": answer_key,
@@ -230,26 +296,20 @@ async def evaluate_three_files_endpoint(
     for label, upload in files_map.items():
         if not upload or not upload.filename:
             raise HTTPException(400, f"Missing required file: {label}")
-        
-        ext = os.path.splitext(upload.filename)[1].lower()
-        if ext not in allowed_exts:
-            raise HTTPException(400, f"Unsupported file type '{ext}' for {label}. Allowed: PDF, JPG, JPEG, PNG")
-        
+
         content = await upload.read()
-        if len(content) == 0:
-            raise HTTPException(400, f"{label} is empty (0 bytes)")
-        if len(content) > 30 * 1024 * 1024:
-            raise HTTPException(400, f"{label} exceeds 30MB limit")
-        
+        # Content and magic-byte validation
+        validate_uploaded_file_content(content, upload.filename, label)
+
         save_name = f"{uuid.uuid4().hex[:8]}_{upload.filename}"
         save_path = os.path.join(STORAGE_DIR, save_name)
         with open(save_path, "wb") as f:
             f.write(content)
-        
+
         saved_paths[label] = save_path
         saved_filenames[label] = save_name
 
-    # Validate student exists
+    # Validate target student exists
     conn = get_db()
     c = conn.cursor()
     c.execute("SELECT id, full_name, email FROM users WHERE id = ? AND role = 'student'", (student_id,))
@@ -261,7 +321,7 @@ async def evaluate_three_files_endpoint(
     student_name = student["full_name"]
     student_email = student["email"]
 
-    # Run Evaluation via Gemini + SymPy
+    # Run AI evaluation via Gemini + SymPy (or fallback)
     try:
         eval_result = evaluate_three_files(
             question_paper_path=saved_paths["Question Paper"],
@@ -276,15 +336,15 @@ async def evaluate_three_files_endpoint(
     eval_id = "eval-" + uuid.uuid4().hex[:10]
     now = datetime.now().isoformat()
     questions_list = eval_result.get("questions", [])
-    
-    # Ensure every question has final_marks initialized to proposed_marks
+
+    # Ensure final_marks initialized to proposed_marks
     for q in questions_list:
         if "final_marks" not in q:
             q["final_marks"] = q.get("proposed_marks", 0.0)
 
-    total_proposed = float(eval_result.get("total_proposed_score", 0.0))
-    total_final = sum(float(q.get("final_marks", 0.0)) for q in questions_list)
-    max_score = float(eval_result.get("max_score", 0.0))
+    total_proposed = round(float(eval_result.get("total_proposed_score", 0.0)), 2)
+    total_final = round(sum(float(q.get("final_marks", 0.0)) for q in questions_list), 2)
+    max_score = round(float(eval_result.get("max_score", 0.0)), 2)
     engine_name = eval_result.get("engine", "Gemini + SymPy")
 
     c.execute("""
@@ -369,7 +429,7 @@ def publish_evaluation(
 ):
     """
     Teacher corrects, approves marks, and publishes results to the student.
-    Once published, the student can view their marks and feedback.
+    Strict server-side marks validation and recalculation.
     """
     conn = get_db()
     c = conn.cursor()
@@ -379,15 +439,35 @@ def publish_evaluation(
         conn.close()
         raise HTTPException(404, "Evaluation not found")
 
-    # Convert Pydantic objects to dicts
-    updated_questions = [q.model_dump() if hasattr(q, "model_dump") else q.dict() for q in req.questions]
-    total_final = sum(float(q.get("final_marks", 0.0)) for q in updated_questions)
+    updated_questions = []
+    total_final = 0.0
+
+    # Server-side validation of marks bounds
+    for q in req.questions:
+        q_dict = q.model_dump() if hasattr(q, "model_dump") else q.dict()
+        max_m = float(q_dict.get("max_marks", 5.0))
+        final_m = float(q_dict.get("final_marks", 0.0))
+
+        if final_m < 0 or final_m > max_m:
+            conn.close()
+            raise HTTPException(
+                400,
+                f"Question {q.question_num}: Final marks ({final_m}) must be between 0 and maximum marks ({max_m})."
+            )
+
+        q_dict["final_marks"] = round(final_m, 2)
+        total_final += final_m
+        updated_questions.append(q_dict)
+
+    total_final = round(total_final, 2)
+    total_max = round(sum(float(q.get("max_marks", 5.0)) for q in updated_questions), 2)
     now = datetime.now().isoformat()
 
     c.execute("""
     UPDATE evaluations
     SET questions_data = ?,
         total_final_score = ?,
+        max_score = ?,
         teacher_comments = ?,
         status = 'published',
         published_at = ?
@@ -395,6 +475,7 @@ def publish_evaluation(
     """, (
         json.dumps(updated_questions),
         total_final,
+        total_max,
         req.teacher_comments or "",
         now,
         eval_id
@@ -420,7 +501,7 @@ def publish_evaluation(
 def get_my_results(current_user: Dict[str, Any] = Depends(require_student)):
     """
     Students can view ONLY their own published marks and evaluations.
-    Enforces role permission: student_id must match current_user['id'] and status == 'published'.
+    Enforces strict role permission: student_id must match current_user['id'] and status == 'published'.
     """
     student_id = current_user["id"]
     conn = get_db()
@@ -472,8 +553,8 @@ def get_my_results(current_user: Dict[str, Any] = Depends(require_student)):
         "results": results,
         "analytics": {
             "tests_completed": len(results),
-            "total_marks_earned": total_earned,
-            "total_max_marks": total_possible,
+            "total_marks_earned": round(total_earned, 2),
+            "total_max_marks": round(total_possible, 2),
             "overall_percentage": overall_pct,
             "questions_evaluated": total_questions,
             "questions_fully_correct": correct_count,
@@ -490,7 +571,10 @@ def get_my_result_detail(eval_id: str, current_user: Dict[str, Any] = Depends(re
     """
     conn = get_db()
     c = conn.cursor()
-    c.execute("SELECT * FROM evaluations WHERE id = ? AND student_id = ? AND status = 'published'", (eval_id, current_user["id"]))
+    c.execute("""
+    SELECT * FROM evaluations
+    WHERE id = ? AND student_id = ? AND status = 'published'
+    """, (eval_id, current_user["id"]))
     row = c.fetchone()
     conn.close()
 
@@ -507,7 +591,7 @@ def get_my_result_detail(eval_id: str, current_user: Dict[str, Any] = Depends(re
 @app.get("/api/export/pdf/{eval_id}")
 def export_evaluation_pdf(eval_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
     """
-    Generates a PDF report.
+    Generates an official PDF report.
     Teachers can export any evaluation.
     Students can export only their own published evaluations.
     """
@@ -520,7 +604,7 @@ def export_evaluation_pdf(eval_id: str, current_user: Dict[str, Any] = Depends(g
     if not row:
         raise HTTPException(404, "Evaluation not found")
 
-    # Permission check
+    # Strict permission check
     if current_user["role"] == "student":
         if row["student_id"] != current_user["id"] or row["status"] != "published":
             raise HTTPException(403, "Access denied to this evaluation report.")

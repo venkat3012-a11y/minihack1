@@ -77,7 +77,16 @@ export const MyResults: React.FC = () => {
         {/* Score Banner */}
         <div className="card-premium bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white border-0 flex flex-wrap items-center justify-between gap-4">
           <div>
-            <span className="badge-teal mb-2">Results Published</span>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="badge-teal">Results Published</span>
+              <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-medium ${
+                (detail.engine || '').includes('Gemini')
+                  ? 'bg-indigo-900/80 text-indigo-200 border border-indigo-600/50'
+                  : 'bg-amber-900/80 text-amber-200 border border-amber-600/50'
+              }`}>
+                Engine: {detail.engine || 'Gemini AI + SymPy'}
+              </span>
+            </div>
             <h2 className="text-xl font-bold mt-1">{detail.test_title}</h2>
             <p className="text-xs text-slate-300 mt-0.5">Student: {detail.student_name}</p>
           </div>

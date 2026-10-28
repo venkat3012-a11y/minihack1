@@ -107,7 +107,10 @@ export interface StudentResultDetail {
   total_final_score: number
   max_score: number
   status: string
+  engine?: string
   teacher_comments: string
+  created_at?: string
+  published_at?: string
   questions: EvaluationQuestion[]
 }
 
@@ -132,7 +135,7 @@ export const api = {
     return res
   },
 
-  async register(data: { email: string; password: string; full_name: string; role: string }): Promise<{ access_token: string; user: User }> {
+  async register(data: { email: string; password: string; full_name: string; role: string; teacher_code?: string }): Promise<{ access_token: string; user: User }> {
     const res = await request<{ access_token: string; user: User }>('/api/auth/register', {
       method: 'POST',
       body: JSON.stringify(data)
