@@ -1,0 +1,23 @@
+# Environment variables and secrets - NEVER COMMIT
+.env
+*.env
+backend/.env
+backend/*.env
+
+# Dependencies
+node_modules/
+.venv/
+env/
+venv/
+
+# Build and caches
+dist/
+build/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local databases and uploads
+backend/evalai.db*
+backend/storage/
+*.log
