@@ -3,7 +3,7 @@ import {
   FileText, CheckCircle2, AlertCircle, Award,
   Send, RotateCcw, X, Loader2, FileUp, AlertTriangle
 } from 'lucide-react'
-import { api, EvaluationQuestion, EvaluationRecord, User } from '../../services/api'
+import { api, EvaluationQuestion, EvaluationRecord, User, Exam } from '../../services/api'
 
 type FileState = {
   file: File | null
@@ -143,7 +143,9 @@ function FileDropZone({
 
 export const EvaluationUploader: React.FC = () => {
   const [students, setStudents] = useState<User[]>([])
-  const [selectedStudentId, setSelectedStudentId] = useState('')
+  const [exams, setExams] = useState<Exam[]>([])
+  const [selectedExamId, setSelectedExamId] = useState('')
+  const [selectedStudentId, setSelectedStudentId] = useState('auto')
   const [testTitle, setTestTitle] = useState('Mathematics Assessment')
 
   // Three required file inputs
@@ -163,15 +165,22 @@ export const EvaluationUploader: React.FC = () => {
   const [publishSuccess, setPublishSuccess] = useState(false)
 
   useEffect(() => {
-    api.getTeacherStudents()
-      .then(res => {
-        setStudents(res.students || [])
-        if (res.students && res.students.length > 0) {
-          setSelectedStudentId(res.students[0].id)
-        }
-      })
-      .catch(() => {})
+    Promise.all([
+      api.getTeacherStudents().catch(() => ({ students: [] })),
+      api.getExams().catch(() => ({ exams: [] }))
+    ]).then(([studRes, examRes]) => {
+      setStudents(studRes.students || [])
+      setExams(examRes.exams || [])
+    })
   }, [])
+
+  const handleExamChange = (examId: string) => {
+    setSelectedExamId(examId)
+    if (examId) {
+      const ex = exams.find(e => e.id === examId)
+      if (ex) setTestTitle(ex.title)
+    }
+  }
 
   const canEvaluate =
     Boolean(qp.file && !qp.error) &&
@@ -293,9 +302,24 @@ export const EvaluationUploader: React.FC = () => {
           </div>
 
           {/* Assessment & Student Metadata */}
-          <div className="grid gap-4 sm:grid-cols-2 pt-2 border-t border-slate-100">
+          <div className="grid gap-4 sm:grid-cols-3 pt-2 border-t border-slate-100">
             <div>
-              <label className="form-label">Assessment Title</label>
+              <label className="form-label">Link to Registered Exam (Optional)</label>
+              <select
+                value={selectedExamId}
+                onChange={e => handleExamChange(e.target.value)}
+                className="form-input"
+              >
+                <option value="">-- Standalone Evaluation --</option>
+                {exams.map(ex => (
+                  <option key={ex.id} value={ex.id}>
+                    {ex.title} ({ex.class_name || 'Class 10'}) - {ex.total_marks} Marks
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="form-label">Assessment Title *</label>
               <input
                 type="text"
                 value={testTitle}
@@ -305,16 +329,16 @@ export const EvaluationUploader: React.FC = () => {
               />
             </div>
             <div>
-              <label className="form-label">Target Student</label>
+              <label className="form-label">Target Student *</label>
               <select
                 value={selectedStudentId}
                 onChange={e => setSelectedStudentId(e.target.value)}
                 className="form-input"
               >
-                {students.length === 0 && <option value="">No students available</option>}
+                <option value="auto">✨ Auto-Map via Roll Number (OCR)</option>
                 {students.map(s => (
                   <option key={s.id} value={s.id}>
-                    {s.full_name} ({s.email})
+                    [{s.roll_number || 'No Roll'}] {s.full_name} ({s.email})
                   </option>
                 ))}
               </select>

@@ -295,5 +295,193 @@ class TestApiEndpoints(unittest.TestCase):
         )
         self.assertEqual(bad_res2.status_code, 400)
 
+    def test_student_roster_and_auto_roll_number(self):
+        t_res = self.client.post("/api/auth/login", json={"email": "teacher@evalai.edu", "password": "teacher123"})
+        t_token = t_res.json()["access_token"]
+        headers = {"Authorization": f"Bearer {t_token}"}
+
+        # 1. Next roll number should be 25ALR004 (since 001, 002, 003 seeded)
+        nr_res = self.client.get("/api/teacher/students/next-roll-number", headers=headers)
+        self.assertEqual(nr_res.status_code, 200)
+        self.assertEqual(nr_res.json()["next_roll_number"], "25ALR004")
+
+        # 2. Add student with auto roll number
+        add_res = self.client.post("/api/teacher/students", headers=headers, json={
+            "full_name": "Divya Nair",
+            "email": "divya@evalai.edu",
+            "class_name": "Grade 7"
+        })
+        self.assertEqual(add_res.status_code, 200)
+        st_data = add_res.json()["student"]
+        self.assertEqual(st_data["roll_number"], "25ALR004")
+        st_id = st_data["id"]
+
+        # 3. Attempt duplicate roll number
+        dup_res = self.client.post("/api/teacher/students", headers=headers, json={
+            "full_name": "Duplicate Student",
+            "email": "dup@evalai.edu",
+            "roll_number": "25ALR004"
+        })
+        self.assertEqual(dup_res.status_code, 400)
+        self.assertIn("already assigned", dup_res.json()["detail"])
+
+        # 4. Attempt invalid roll number format
+        inv_res = self.client.post("/api/teacher/students", headers=headers, json={
+            "full_name": "Invalid Roll",
+            "email": "inv@evalai.edu",
+            "roll_number": "INVALID-123"
+        })
+        self.assertEqual(inv_res.status_code, 400)
+
+        # 5. Update student
+        up_res = self.client.put(f"/api/teacher/students/{st_id}", headers=headers, json={
+            "full_name": "Divya N. Nair",
+            "email": "divya.nair@evalai.edu",
+            "class_name": "Grade 7-A",
+            "roll_number": "25ALR004"
+        })
+        self.assertEqual(up_res.status_code, 200)
+
+        # 6. Delete student
+        del_res = self.client.delete(f"/api/teacher/students/{st_id}", headers=headers)
+        self.assertEqual(del_res.status_code, 200)
+
+    def test_exam_creation_and_marks_validation(self):
+        t_res = self.client.post("/api/auth/login", json={"email": "teacher@evalai.edu", "password": "teacher123"})
+        t_token = t_res.json()["access_token"]
+        headers = {"Authorization": f"Bearer {t_token}"}
+
+        # 1. Invalid marks sum: total is 20, but question is 10 -> 400
+        bad_exam = self.client.post("/api/teacher/exams", headers=headers, json={
+            "title": "Mismatched Marks Exam",
+            "subject": "Mathematics",
+            "total_marks": 20.0,
+            "questions": [
+                {"question_num": 1, "text": "Solve 2x=10", "max_marks": 10.0}
+            ]
+        })
+        self.assertEqual(bad_exam.status_code, 400)
+        self.assertIn("does not match", bad_exam.json()["detail"])
+
+        # 2. Valid exam creation: total 10, question marks 5 + 5 = 10 -> 200
+        good_exam = self.client.post("/api/teacher/exams", headers=headers, json={
+            "title": "Algebra Unit Exam",
+            "subject": "Mathematics",
+            "class_name": "Grade 7",
+            "total_marks": 10.0,
+            "duration_minutes": 30,
+            "questions": [
+                {"question_num": 1, "text": "Solve 3x + 1 = 10", "max_marks": 5.0, "model_solution": "x = 3"},
+                {"question_num": 2, "text": "Simplify 4/8", "max_marks": 5.0, "model_solution": "1/2"}
+            ]
+        })
+        self.assertEqual(good_exam.status_code, 200)
+        exam_id = good_exam.json()["exam_id"]
+
+        # 3. Retrieve exam details
+        det_res = self.client.get(f"/api/teacher/exams/{exam_id}", headers=headers)
+        self.assertEqual(det_res.status_code, 200)
+        self.assertEqual(len(det_res.json()["exam"]["questions"]), 2)
+
+    def test_auto_mapping_and_pending_queue(self):
+        t_res = self.client.post("/api/auth/login", json={"email": "teacher@evalai.edu", "password": "teacher123"})
+        t_token = t_res.json()["access_token"]
+        headers = {"Authorization": f"Bearer {t_token}"}
+
+        # 1. Upload sheet containing 25ALR001 in header -> auto-mapped to Aarav Patel!
+        mapped_res = self.client.post(
+            "/api/teacher/upload-sheet-auto-map",
+            headers=headers,
+            files={
+                "student_sheet": ("student_sheet_25ALR001.pdf", io.BytesIO(b"%PDF-1.4\nRoll No: 25ALR001\nAns 1: x=5"), "application/pdf")
+            }
+        )
+        self.assertEqual(mapped_res.status_code, 200)
+        self.assertTrue(mapped_res.json()["mapped"])
+        self.assertEqual(mapped_res.json()["student"]["roll_number"], "25ALR001")
+        self.assertEqual(mapped_res.json()["student"]["full_name"], "Aarav Patel")
+
+        # 2. Upload sheet with unregistered roll number 25ALR999 -> placed in pending queue!
+        unreg_res = self.client.post(
+            "/api/teacher/upload-sheet-auto-map",
+            headers=headers,
+            files={
+                "student_sheet": ("unregistered_25ALR999.pdf", io.BytesIO(b"%PDF-1.4\nRoll No: 25ALR999"), "application/pdf")
+            }
+        )
+        self.assertEqual(unreg_res.status_code, 200)
+        self.assertFalse(unreg_res.json()["mapped"])
+        self.assertTrue(unreg_res.json()["pending"])
+        pending_id = unreg_res.json()["pending_id"]
+
+        # 3. Teacher fetches pending queue
+        pq_res = self.client.get("/api/teacher/pending-sheets", headers=headers)
+        self.assertEqual(pq_res.status_code, 200)
+        p_ids = [p["id"] for p in pq_res.json()["pending_sheets"]]
+        self.assertIn(pending_id, p_ids)
+
+        # 4. Teacher resolves pending sheet mapping to Rohan (25ALR003)
+        res_solve = self.client.post(
+            f"/api/teacher/pending-sheets/{pending_id}/resolve",
+            headers=headers,
+            json={"roll_number": "25ALR003"}
+        )
+        self.assertEqual(res_solve.status_code, 200)
+        self.assertEqual(res_solve.json()["student"]["roll_number"], "25ALR003")
+
+    def test_ai_improvement_pipeline(self):
+        t_res = self.client.post("/api/auth/login", json={"email": "teacher@evalai.edu", "password": "teacher123"})
+        t_token = t_res.json()["access_token"]
+        headers = {"Authorization": f"Bearer {t_token}"}
+
+        # 1. Fetch AI stats
+        stats_res = self.client.get("/api/teacher/ai-improvement/stats", headers=headers)
+        self.assertEqual(stats_res.status_code, 200)
+        data = stats_res.json()
+        self.assertIn("current_version", data)
+        self.assertGreaterEqual(data["total_examples"], 1)
+
+        # 2. Run model improvement
+        run_res = self.client.post("/api/teacher/ai-improvement/run", headers=headers)
+        self.assertEqual(run_res.status_code, 200)
+        self.assertTrue(run_res.json()["ok"])
+        self.assertIn("v1.", run_res.json()["new_version"])
+
+    def test_class_analytics_and_csv_export(self):
+        t_res = self.client.post("/api/auth/login", json={"email": "teacher@evalai.edu", "password": "teacher123"})
+        t_token = t_res.json()["access_token"]
+        headers = {"Authorization": f"Bearer {t_token}"}
+
+        # 1. Class analytics summary
+        ana_res = self.client.get("/api/teacher/analytics/class-summary", headers=headers)
+        self.assertEqual(ana_res.status_code, 200)
+        a_data = ana_res.json()
+        self.assertGreaterEqual(a_data["total_evaluations"], 2)
+        self.assertIn("grade_distribution", a_data)
+        self.assertIn("question_difficulty", a_data)
+
+        # 2. CSV Export
+        csv_res = self.client.get("/api/teacher/export/csv", headers=headers)
+        self.assertEqual(csv_res.status_code, 200)
+        self.assertIn("text/csv", csv_res.headers["Content-Type"])
+        self.assertIn("Roll Number", csv_res.text)
+        self.assertIn("25ALR001", csv_res.text)
+
+    def test_student_dashboard(self):
+        s_res = self.client.post("/api/auth/login", json={"email": "aarav@evalai.edu", "password": "student123"})
+        s_token = s_res.json()["access_token"]
+        headers = {"Authorization": f"Bearer {s_token}"}
+
+        res = self.client.get("/api/student/dashboard", headers=headers)
+        self.assertEqual(res.status_code, 200)
+        d = res.json()
+        self.assertEqual(d["profile"]["roll_number"], "25ALR001")
+        self.assertEqual(d["profile"]["full_name"], "Aarav Patel")
+        self.assertIn("analytics", d)
+        self.assertIn("strengths", d)
+        self.assertIn("weak_topics", d)
+        self.assertIn("recommendations", d)
+        self.assertIn("performance_history", d)
+
 if __name__ == "__main__":
     unittest.main()

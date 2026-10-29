@@ -203,3 +203,142 @@ def split_answers_by_question(text: str) -> Dict[str, str]:
                 answers[current_q] = l_str
 
     return answers
+
+ROLL_NUMBER_REGEX = re.compile(r"(?:^|[^a-zA-Z0-9])(25\s*[-_.]?\s*ALR\s*[-_.]?\s*\d{3})(?:$|[^a-zA-Z0-9])", re.IGNORECASE)
+GENERIC_ROLL_REGEX = re.compile(r"(?:Roll\s*(?:No|Number|#)?|Register\s*No|ID)[:.\s]*([A-Z0-9\-_]+)", re.IGNORECASE)
+
+def extract_roll_number_from_sheet(file_bytes: bytes, filename: str) -> Dict[str, Any]:
+    """
+    Extracts student roll number from an uploaded answer sheet (PDF, PNG, JPG).
+    Returns dict:
+      roll_number: normalized roll number (e.g. '25ALR001') or None
+      confidence: float between 0.0 and 1.0
+      student_name: extracted name if visible, or None
+      method: extraction technique used ('digital_text', 'easyocr', 'gemini_vision', 'filename_heuristic')
+    """
+    ext = filename.lower().split(".")[-1] if "." in filename else ""
+    raw_text = ""
+    method = "none"
+    confidence = 0.0
+    extracted_roll = None
+    extracted_name = None
+
+    # 1. Digital PDF extraction
+    if ext == "pdf":
+        try:
+            reader = PdfReader(io.BytesIO(file_bytes))
+            if reader.pages:
+                raw_text = reader.pages[0].extract_text() or ""
+                if len(reader.pages) > 1 and not raw_text.strip():
+                    raw_text = reader.pages[1].extract_text() or ""
+                if raw_text.strip():
+                    method = "digital_text"
+        except Exception:
+            # Check if bytes contains text directly
+            try:
+                decoded = file_bytes.decode("utf-8", errors="ignore")
+                if "25ALR" in decoded or "Roll" in decoded:
+                    raw_text = decoded
+                    method = "text_bytes"
+            except Exception:
+                pass
+
+    # 2. Search regex in extracted digital text
+    if raw_text:
+        match = ROLL_NUMBER_REGEX.search(raw_text)
+        if match:
+            clean_roll = re.sub(r"[\s\-_.]", "", match.group(1)).upper()
+            return {
+                "roll_number": clean_roll,
+                "confidence": 0.98,
+                "student_name": None,
+                "method": method or "digital_text"
+            }
+
+        # Check generic roll
+        gen_match = GENERIC_ROLL_REGEX.search(raw_text)
+        if gen_match:
+            candidate = gen_match.group(1).strip().upper()
+            if "25ALR" in candidate:
+                clean_roll = re.sub(r"[\s\-_.]", "", candidate)
+                return {
+                    "roll_number": clean_roll,
+                    "confidence": 0.92,
+                    "student_name": None,
+                    "method": method or "digital_text"
+                }
+
+    # 3. Filename heuristic fallback
+    fn_match = ROLL_NUMBER_REGEX.search(filename)
+    if fn_match:
+        extracted_roll = re.sub(r"[\s\-_.]", "", fn_match.group(1)).upper()
+        return {
+            "roll_number": extracted_roll,
+            "confidence": 0.85,
+            "student_name": None,
+            "method": "filename"
+        }
+
+    # 4. If image or scanned PDF without digital text, try OCR / Gemini Vision
+    if not extracted_roll:
+        try:
+            import os
+            key = os.environ.get("GEMINI_API_KEY", "").strip("\"' ")
+            if key and not key.startswith("placeholder") and key != "your_gemini_api_key_here":
+                from google import genai
+                from google.genai import types
+                client = genai.Client(api_key=key)
+                mime = "application/pdf" if ext == "pdf" else f"image/{'jpeg' if ext in ['jpg', 'jpeg'] else 'png'}"
+                prompt = (
+                    "Look at the header/top of this student exam sheet. Extract the student's Roll Number / ID. "
+                    "The format is typically '25ALR###' (e.g. 25ALR001). "
+                    "Also extract the student's name if written. "
+                    "Return ONLY JSON: {\"roll_number\": \"25ALR001\" or null, \"student_name\": string or null, \"confidence\": float}."
+                )
+                res = client.models.generate_content(
+                    model="gemini-3.5-flash-lite",
+                    contents=[
+                        types.Part.from_bytes(data=file_bytes, mime_type=mime),
+                        types.Part.from_text(text=prompt)
+                    ],
+                    config=types.GenerateContentConfig(response_mime_type="application/json")
+                )
+                if res and res.text:
+                    import json
+                    parsed = json.loads(res.text.strip())
+                    rn = parsed.get("roll_number")
+                    if rn:
+                        clean_rn = re.sub(r"[\s\-_.]", "", str(rn)).upper()
+                        if "25ALR" in clean_rn or len(clean_rn) >= 6:
+                            return {
+                                "roll_number": clean_rn,
+                                "confidence": float(parsed.get("confidence", 0.90)),
+                                "student_name": parsed.get("student_name"),
+                                "method": "gemini_vision"
+                            }
+        except Exception:
+            pass
+
+    # 5. EasyOCR fallback for images
+    if not extracted_roll and ext in ["jpg", "jpeg", "png"]:
+        try:
+            ocr_res = ocr_image(file_bytes, engine="easyocr")
+            txt = ocr_res.get("raw_text", "")
+            match = ROLL_NUMBER_REGEX.search(txt)
+            if match:
+                clean_roll = re.sub(r"[\s\-_.]", "", match.group(1)).upper()
+                return {
+                    "roll_number": clean_roll,
+                    "confidence": 0.88,
+                    "student_name": None,
+                    "method": "easyocr"
+                }
+        except Exception:
+            pass
+
+    return {
+        "roll_number": extracted_roll,
+        "confidence": confidence,
+        "student_name": extracted_name,
+        "method": method
+    }

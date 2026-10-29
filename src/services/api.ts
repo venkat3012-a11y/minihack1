@@ -44,6 +44,111 @@ export interface User {
   email: string
   full_name: string
   role: 'teacher' | 'student'
+  roll_number?: string
+  class_name?: string
+  evaluations_count?: number
+  avg_score_pct?: number
+  created_at?: string
+}
+
+export interface ExamQuestion {
+  id?: string
+  question_num: number
+  text: string
+  max_marks: number
+  model_solution?: string
+  rubric_criteria?: string
+}
+
+export interface Exam {
+  id: string
+  title: string
+  subject: string
+  class_name: string
+  total_marks: number
+  duration_minutes: number
+  exam_date: string
+  question_count?: number
+  submission_count?: number
+  questions?: ExamQuestion[]
+  created_at?: string
+}
+
+export interface PendingSheet {
+  id: string
+  exam_id?: string
+  exam_title?: string
+  original_filename: string
+  storage_filename: string
+  extracted_roll_number?: string
+  ocr_confidence: number
+  status: 'pending' | 'resolved' | 'rejected'
+  error_reason?: string
+  created_at: string
+}
+
+export interface AiImprovementStats {
+  current_version: {
+    id?: string
+    version_tag: string
+    base_model: string
+    total_examples: number
+    train_count: number
+    val_count: number
+    test_count: number
+    benchmark_mae: number
+    benchmark_accuracy: number
+    notes?: string
+    created_at?: string
+  }
+  version_history: any[]
+  total_examples: number
+  train_count: number
+  val_count: number
+  test_count: number
+  published_tests_available: number
+  data_quality_score: number
+  methodology: string
+}
+
+export interface ClassAnalyticsSummary {
+  total_evaluations: number
+  class_average_pct: number
+  pass_rate_pct: number
+  highest_score_pct: number
+  lowest_score_pct: number
+  grade_distribution: Record<string, number>
+  question_difficulty: {
+    question_num: number
+    text: string
+    average_percentage: number
+    difficulty: 'Easy' | 'Moderate' | 'Challenging'
+  }[]
+  common_mistakes: { mistake: string; occurrences: number }[]
+  weak_topics: string[]
+  strong_topics: string[]
+}
+
+export interface StudentDashboardData {
+  profile: User
+  analytics: {
+    exams_completed: number
+    total_marks_earned: number
+    total_possible_marks: number
+    overall_percentage: number
+    grade_band: string
+  }
+  strengths: string[]
+  weak_topics: string[]
+  recommendations: string[]
+  performance_history: {
+    exam_num: number
+    title: string
+    score: number
+    max_score: number
+    percentage: number
+    date: string
+  }[]
 }
 
 export interface EvaluationQuestion {
@@ -148,8 +253,135 @@ export const api = {
     return request<{ user: User }>('/api/auth/me')
   },
 
-  async getTeacherStudents(): Promise<{ students: User[] }> {
-    return request<{ students: User[] }>('/api/teacher/students')
+  async getTeacherStudents(search?: string, className?: string): Promise<{ students: User[] }> {
+    const params = new URLSearchParams()
+    if (search) params.append('search', search)
+    if (className) params.append('class_name', className)
+    const q = params.toString() ? `?${params.toString()}` : ''
+    return request<{ students: User[] }>(`/api/teacher/students${q}`)
+  },
+
+  async getNextRollNumber(): Promise<{ next_roll_number: string }> {
+    return request<{ next_roll_number: string }>('/api/teacher/students/next-roll-number')
+  },
+
+  async createStudent(data: { full_name: string; email: string; roll_number?: string; class_name?: string; password?: string }): Promise<{ ok: boolean; message: string; student: User }> {
+    return request<{ ok: boolean; message: string; student: User }>('/api/teacher/students', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    })
+  },
+
+  async updateStudent(studentId: string, data: { full_name: string; email: string; roll_number?: string; class_name?: string }): Promise<{ ok: boolean; message: string; student: User }> {
+    return request<{ ok: boolean; message: string; student: User }>(`/api/teacher/students/${studentId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    })
+  },
+
+  async deleteStudent(studentId: string): Promise<{ ok: boolean; message: string }> {
+    return request<{ ok: boolean; message: string }>(`/api/teacher/students/${studentId}`, {
+      method: 'DELETE'
+    })
+  },
+
+  // Exam Management
+  async getExams(): Promise<{ exams: Exam[] }> {
+    return request<{ exams: Exam[] }>('/api/teacher/exams')
+  },
+
+  async createExam(data: { title: string; subject?: string; class_name?: string; total_marks: number; duration_minutes?: number; exam_date?: string; questions: ExamQuestion[] }): Promise<{ ok: boolean; message: string; exam_id: string }> {
+    return request<{ ok: boolean; message: string; exam_id: string }>('/api/teacher/exams', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    })
+  },
+
+  async getExamDetail(examId: string): Promise<{ exam: Exam }> {
+    return request<{ exam: Exam }>(`/api/teacher/exams/${examId}`)
+  },
+
+  async deleteExam(examId: string): Promise<{ ok: boolean; message: string }> {
+    return request<{ ok: boolean; message: string }>(`/api/teacher/exams/${examId}`, {
+      method: 'DELETE'
+    })
+  },
+
+  // Auto-Mapping & Pending Queue
+  async uploadSheetAutoMap(studentSheet: File, examId?: string): Promise<{
+    mapped: boolean
+    pending?: boolean
+    student?: User
+    roll_number?: string
+    confidence?: number
+    storage_filename: string
+    pending_id?: string
+    reason?: string
+    warning?: string
+  }> {
+    const fd = new FormData()
+    fd.append('student_sheet', studentSheet)
+    if (examId) fd.append('exam_id', examId)
+
+    return request('/api/teacher/upload-sheet-auto-map', {
+      method: 'POST',
+      body: fd
+    })
+  },
+
+  async getPendingSheets(): Promise<{ pending_sheets: PendingSheet[]; count: number }> {
+    return request<{ pending_sheets: PendingSheet[]; count: number }>('/api/teacher/pending-sheets')
+  },
+
+  async resolvePendingSheet(sheetId: string, data: { student_id?: string; roll_number?: string }): Promise<{ ok: boolean; message: string; student: User; storage_filename: string }> {
+    return request<{ ok: boolean; message: string; student: User; storage_filename: string }>(`/api/teacher/pending-sheets/${sheetId}/resolve`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    })
+  },
+
+  async deletePendingSheet(sheetId: string): Promise<{ ok: boolean; message: string }> {
+    return request<{ ok: boolean; message: string }>(`/api/teacher/pending-sheets/${sheetId}`, {
+      method: 'DELETE'
+    })
+  },
+
+  // AI Continuous Improvement
+  async getAiImprovementStats(): Promise<AiImprovementStats> {
+    return request<AiImprovementStats>('/api/teacher/ai-improvement/stats')
+  },
+
+  async runAiImprovement(): Promise<{
+    ok: boolean
+    new_version: string
+    ingested_count: number
+    duplicates_skipped: number
+    anonymized_count: number
+    total_examples: number
+    train_count: number
+    val_count: number
+    test_count: number
+    benchmark_mae: number
+    benchmark_accuracy: number
+    created_at: string
+  }> {
+    return request('/api/teacher/ai-improvement/run', {
+      method: 'POST'
+    })
+  },
+
+  // Class Analytics & CSV Export
+  async getClassAnalytics(): Promise<ClassAnalyticsSummary> {
+    return request<ClassAnalyticsSummary>('/api/teacher/analytics/class-summary')
+  },
+
+  async downloadClassCsv(): Promise<Blob> {
+    return request<Blob>('/api/teacher/export/csv')
+  },
+
+  // Student Dashboard
+  async getStudentDashboard(): Promise<StudentDashboardData> {
+    return request<StudentDashboardData>('/api/student/dashboard')
   },
 
   async evaluateThreeFiles(

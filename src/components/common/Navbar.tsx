@@ -1,6 +1,18 @@
-import React from 'react'
-import { BookOpen, ClipboardCheck, LogOut, UserCircle2, CheckCircle2 } from 'lucide-react'
+import React, { useState, useEffect } from 'react'
+import {
+  BookOpen,
+  ClipboardCheck,
+  LogOut,
+  UserCircle2,
+  CheckCircle2,
+  Users,
+  GraduationCap,
+  Clock,
+  BarChart3,
+  Sparkles
+} from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
+import { api } from '../../services/api'
 
 interface NavbarProps {
   currentTab: string
@@ -10,14 +22,28 @@ interface NavbarProps {
 export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange }) => {
   const { user, logout } = useAuth()
   const isTeacher = user?.role === 'teacher'
+  const [pendingCount, setPendingCount] = useState<number>(0)
+
+  useEffect(() => {
+    if (isTeacher) {
+      api.getPendingSheets()
+        .then(res => setPendingCount(res.count || 0))
+        .catch(() => {})
+    }
+  }, [isTeacher, currentTab])
 
   const teacherTabs = [
     { id: 'evaluate', label: 'Evaluate Test', icon: BookOpen },
+    { id: 'pending', label: 'Pending Verification', icon: Clock, badge: pendingCount },
+    { id: 'exams', label: 'Exams & Rubrics', icon: GraduationCap },
+    { id: 'students', label: 'Student Roster', icon: Users },
     { id: 'history', label: 'Evaluation History', icon: ClipboardCheck },
+    { id: 'analytics', label: 'Class Analytics', icon: BarChart3 },
+    { id: 'ai-improvement', label: 'Improve AI Model', icon: Sparkles },
   ]
 
   const studentTabs = [
-    { id: 'results', label: 'My Results', icon: CheckCircle2 },
+    { id: 'results', label: 'My Results & Analytics', icon: CheckCircle2 },
   ]
 
   const tabs = isTeacher ? teacherTabs : studentTabs
@@ -37,7 +63,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange }) => {
                 Mathematics
               </span>
             </div>
-            <p className="text-xs text-slate-500">Automated Answer Evaluation System</p>
+            <p className="text-xs text-slate-500">Automated Answer Evaluation & Personalized Learning</p>
           </div>
         </div>
 
@@ -46,8 +72,10 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange }) => {
           <div className="hidden sm:flex items-center gap-2.5 rounded-lg border border-slate-200/80 bg-slate-50/50 px-3 py-1.5">
             <UserCircle2 className={`h-5 w-5 ${isTeacher ? 'text-indigo-600' : 'text-teal-600'}`} />
             <div className="text-left text-xs">
-              <div className="font-semibold text-slate-800 leading-tight">{user?.full_name}</div>
-              <div className="text-slate-500 capitalize">{user?.role}</div>
+              <div className="font-semibold text-slate-800 leading-tight">
+                {user?.full_name} {user?.roll_number && <span className="font-mono text-indigo-700 font-bold">({user.roll_number})</span>}
+              </div>
+              <div className="text-slate-500 capitalize">{user?.role} {user?.class_name ? `· ${user.class_name}` : ''}</div>
             </div>
           </div>
 
@@ -61,24 +89,30 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange }) => {
         </div>
       </div>
 
-      {/* Tabs */}
+      {/* Tabs Navigation */}
       <div className="border-t border-slate-200/60 bg-white">
-        <div className="mx-auto flex max-w-7xl space-x-1 overflow-x-auto px-4">
+        <div className="mx-auto flex max-w-7xl space-x-1 overflow-x-auto px-4 scrollbar-none">
           {tabs.map(tab => {
             const Icon = tab.icon
             const active = currentTab === tab.id
+            const badgeCount = (tab as any).badge || 0
             return (
               <button
                 key={tab.id}
                 onClick={() => onTabChange(tab.id)}
-                className={`flex items-center gap-2 border-b-2 px-3.5 py-2.5 text-sm font-medium transition-all whitespace-nowrap ${
+                className={`flex items-center gap-2 border-b-2 px-3.5 py-2.5 text-xs font-semibold transition-all whitespace-nowrap ${
                   active
-                    ? 'border-indigo-600 text-indigo-700 font-semibold'
+                    ? 'border-indigo-600 text-indigo-700 font-bold'
                     : 'border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-900'
                 }`}
               >
                 <Icon className={`h-4 w-4 ${active ? 'text-indigo-600' : 'text-slate-400'}`} />
                 <span>{tab.label}</span>
+                {badgeCount > 0 && (
+                  <span className="rounded-full bg-rose-500 px-1.5 py-0.2 text-[10px] font-bold text-white">
+                    {badgeCount}
+                  </span>
+                )}
               </button>
             )
           })}

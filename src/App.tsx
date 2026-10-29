@@ -4,6 +4,11 @@ import { Navbar } from './components/common/Navbar'
 import { LandingPage } from './components/landing/LandingPage'
 import { EvaluationUploader } from './components/teacher/EvaluationUploader'
 import { EvaluationHistory } from './components/teacher/EvaluationHistory'
+import { StudentManagement } from './components/teacher/StudentManagement'
+import { ExamManagement } from './components/teacher/ExamManagement'
+import { PendingVerificationQueue } from './components/teacher/PendingVerificationQueue'
+import { ClassAnalytics } from './components/teacher/ClassAnalytics'
+import { AiModelImprovement } from './components/teacher/AiModelImprovement'
 import { MyResults } from './components/student/MyResults'
 
 const AppContent: React.FC = () => {
@@ -43,7 +48,12 @@ const AppContent: React.FC = () => {
           {user.role === 'teacher' && (
             <>
               {currentTab === 'evaluate' && <EvaluationUploader />}
+              {currentTab === 'pending' && <PendingVerificationQueue />}
+              {currentTab === 'exams' && <ExamManagement />}
+              {currentTab === 'students' && <StudentManagement />}
               {currentTab === 'history' && <EvaluationHistory />}
+              {currentTab === 'analytics' && <ClassAnalytics />}
+              {currentTab === 'ai-improvement' && <AiModelImprovement />}
             </>
           )}
 
@@ -56,7 +66,7 @@ const AppContent: React.FC = () => {
       </div>
 
       <footer className="border-t border-slate-200/80 bg-white py-4 text-center text-xs text-slate-500">
-        <p>EvalAI · Automated Mathematics Answer Evaluation System · Gemini AI & SymPy Core</p>
+        <p>EvalAI · Automated Mathematics Answer Evaluation & Personalized Learning System · Gemini AI & SymPy Core</p>
       </footer>
     </div>
   )
