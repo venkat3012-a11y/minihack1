@@ -8,7 +8,6 @@ import { StudentManagement } from './components/teacher/StudentManagement'
 import { ExamManagement } from './components/teacher/ExamManagement'
 import { PendingVerificationQueue } from './components/teacher/PendingVerificationQueue'
 import { ClassAnalytics } from './components/teacher/ClassAnalytics'
-import { AiModelImprovement } from './components/teacher/AiModelImprovement'
 import { MyResults } from './components/student/MyResults'
 
 const AppContent: React.FC = () => {
@@ -53,7 +52,6 @@ const AppContent: React.FC = () => {
               {currentTab === 'students' && <StudentManagement />}
               {currentTab === 'history' && <EvaluationHistory />}
               {currentTab === 'analytics' && <ClassAnalytics />}
-              {currentTab === 'ai-improvement' && <AiModelImprovement />}
             </>
           )}
 

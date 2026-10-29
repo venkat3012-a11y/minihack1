@@ -30,7 +30,7 @@ SUPPORTED_GEMINI_MODELS = {
     "gemini-2.5-pro"
 }
 
-DEFAULT_MODEL = "gemini-3.5-flash"
+DEFAULT_MODEL = "gemini-3.5-flash-lite"
 
 def get_gemini_config() -> Dict[str, str]:
     api_key = os.environ.get("GEMINI_API_KEY", "").strip("\"' ")
@@ -214,10 +214,10 @@ Respond ONLY with a valid JSON object matching this exact schema:
     )
 
     # Models to attempt in order of preference and resilience
-    candidate_models = [model_name]
-    for alt in ["gemini-3.5-flash", "gemini-3.5-flash-lite"]:
-        if alt not in candidate_models:
-            candidate_models.append(alt)
+    candidate_models = []
+    for preferred in ["gemini-3.5-flash-lite", model_name, "gemini-3.5-flash", "gemini-3.1-flash-lite"]:
+        if preferred and preferred not in candidate_models:
+            candidate_models.append(preferred)
 
     response = None
     last_exc = None

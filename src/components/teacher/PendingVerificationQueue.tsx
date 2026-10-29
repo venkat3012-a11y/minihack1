@@ -247,3 +247,4 @@ export const PendingVerificationQueue: React.FC = () => {
     </div>
   )
 }
+

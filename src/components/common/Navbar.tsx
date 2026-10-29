@@ -8,8 +8,7 @@ import {
   Users,
   GraduationCap,
   Clock,
-  BarChart3,
-  Sparkles
+  BarChart3
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { api } from '../../services/api'
@@ -39,7 +38,6 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange }) => {
     { id: 'students', label: 'Student Roster', icon: Users },
     { id: 'history', label: 'Evaluation History', icon: ClipboardCheck },
     { id: 'analytics', label: 'Class Analytics', icon: BarChart3 },
-    { id: 'ai-improvement', label: 'Improve AI Model', icon: Sparkles },
   ]
 
   const studentTabs = [

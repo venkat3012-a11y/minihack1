@@ -145,7 +145,7 @@ export const EvaluationUploader: React.FC = () => {
   const [students, setStudents] = useState<User[]>([])
   const [exams, setExams] = useState<Exam[]>([])
   const [selectedExamId, setSelectedExamId] = useState('')
-  const [selectedStudentId, setSelectedStudentId] = useState('auto')
+  const [selectedStudentId, setSelectedStudentId] = useState('')
   const [testTitle, setTestTitle] = useState('Mathematics Assessment')
 
   // Three required file inputs
@@ -169,8 +169,12 @@ export const EvaluationUploader: React.FC = () => {
       api.getTeacherStudents().catch(() => ({ students: [] })),
       api.getExams().catch(() => ({ exams: [] }))
     ]).then(([studRes, examRes]) => {
-      setStudents(studRes.students || [])
+      const studs = studRes.students || []
+      setStudents(studs)
       setExams(examRes.exams || [])
+      if (studs.length > 0) {
+        setSelectedStudentId(studs[0].id)
+      }
     })
   }, [])
 
@@ -206,6 +210,12 @@ export const EvaluationUploader: React.FC = () => {
         testTitle.trim(),
         pct => setUploadPct(pct)
       )
+      if (!evalResult || (evalResult as any).pending) {
+        throw new Error((evalResult as any)?.message || 'Student roll number could not be matched automatically. Please select a registered student from the dropdown.')
+      }
+      if (!evalResult.questions || evalResult.questions.length === 0) {
+        throw new Error('Evaluation completed but no questions were parsed. Please check that the uploaded documents contain legible Mathematics questions and solutions.')
+      }
       setResult(evalResult)
       setEditedQuestions(JSON.parse(JSON.stringify(evalResult.questions || [])))
       setTeacherComments('')
@@ -335,12 +345,12 @@ export const EvaluationUploader: React.FC = () => {
                 onChange={e => setSelectedStudentId(e.target.value)}
                 className="form-input"
               >
-                <option value="auto">✨ Auto-Map via Roll Number (OCR)</option>
                 {students.map(s => (
                   <option key={s.id} value={s.id}>
                     [{s.roll_number || 'No Roll'}] {s.full_name} ({s.email})
                   </option>
                 ))}
+                <option value="auto">✨ Auto-Detect Roll Number via OCR</option>
               </select>
             </div>
           </div>

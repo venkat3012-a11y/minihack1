@@ -333,3 +333,4 @@ export const ClassAnalytics: React.FC = () => {
     </div>
   )
 }
+
