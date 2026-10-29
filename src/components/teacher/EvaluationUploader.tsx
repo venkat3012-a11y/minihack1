@@ -169,7 +169,11 @@ export const EvaluationUploader: React.FC = () => {
       api.getTeacherStudents().catch(() => ({ students: [] })),
       api.getExams().catch(() => ({ exams: [] }))
     ]).then(([studRes, examRes]) => {
-      const studs = studRes.students || []
+      const studs = (studRes.students || []).slice().sort((a: User, b: User) => {
+        const numA = parseInt((a.roll_number || '').replace(/\D/g, ''), 10) || 0
+        const numB = parseInt((b.roll_number || '').replace(/\D/g, ''), 10) || 0
+        return numA - numB
+      })
       setStudents(studs)
       setExams(examRes.exams || [])
       if (studs.length > 0) {

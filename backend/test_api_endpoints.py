@@ -483,5 +483,187 @@ class TestApiEndpoints(unittest.TestCase):
         self.assertIn("recommendations", d)
         self.assertIn("performance_history", d)
 
+    def test_roll_number_ordering_003_001_002(self):
+        """Acceptance Test 1: Uploading sheets in order 003, 001, 002 organizes them as 001, 002, 003."""
+        t_res = self.client.post("/api/auth/login", json={"email": "teacher@evalai.edu", "password": "teacher123"})
+        headers = {"Authorization": f"Bearer {t_res.json()['access_token']}"}
+
+        # Clear existing pending sheets for clean test
+        from database import get_db
+        conn = get_db()
+        conn.execute("DELETE FROM pending_sheets")
+        conn.commit()
+        conn.close()
+
+        # Upload in scrambled order: 003, 001, 002
+        for r_num in ["25ALR003", "25ALR001", "25ALR002"]:
+            up_res = self.client.post(
+                "/api/teacher/upload-sheet-auto-map",
+                headers=headers,
+                files={
+                    "student_sheet": (f"sheet_{r_num}.pdf", io.BytesIO(f"%PDF-1.4\nRoll No: {r_num}\nAnswer 1".encode()), "application/pdf")
+                }
+            )
+            self.assertEqual(up_res.status_code, 200)
+
+        # Fetch queue
+        res = self.client.get("/api/teacher/pending-sheets", headers=headers)
+        self.assertEqual(res.status_code, 200)
+        rolls = [p["extracted_roll_number"] for p in res.json()["pending_sheets"]]
+        self.assertEqual(rolls, ["25ALR001", "25ALR002", "25ALR003"])
+
+    def test_numeric_order_002_before_010(self):
+        """Acceptance Test 2: 25ALR002 appears strictly before 25ALR010 in queue order."""
+        t_res = self.client.post("/api/auth/login", json={"email": "teacher@evalai.edu", "password": "teacher123"})
+        headers = {"Authorization": f"Bearer {t_res.json()['access_token']}"}
+
+        from database import get_db
+        conn = get_db()
+        conn.execute("DELETE FROM pending_sheets")
+        conn.commit()
+        conn.close()
+
+        # Upload 010 first, then 002
+        for r_num in ["25ALR010", "25ALR002"]:
+            self.client.post(
+                "/api/teacher/upload-sheet-auto-map",
+                headers=headers,
+                files={
+                    "student_sheet": (f"sheet_{r_num}.pdf", io.BytesIO(f"%PDF-1.4\nRoll No: {r_num}\nAnswer 1".encode()), "application/pdf")
+                }
+            )
+
+        res = self.client.get("/api/teacher/pending-sheets", headers=headers)
+        rolls = [p["extracted_roll_number"] for p in res.json()["pending_sheets"]]
+        self.assertEqual(rolls, ["25ALR002", "25ALR010"])
+
+    def test_unreadable_roll_number_never_assigned_to_next_student(self):
+        """Acceptance Test 3: Unreadable roll number is kept pending in unidentified section and never assigned to next student."""
+        t_res = self.client.post("/api/auth/login", json={"email": "teacher@evalai.edu", "password": "teacher123"})
+        headers = {"Authorization": f"Bearer {t_res.json()['access_token']}"}
+
+        from database import get_db
+        conn = get_db()
+        conn.execute("DELETE FROM pending_sheets")
+        conn.commit()
+        conn.close()
+
+        # Upload unreadable sheet
+        up_res = self.client.post(
+            "/api/teacher/upload-sheet-auto-map",
+            headers=headers,
+            files={
+                "student_sheet": ("unreadable_sheet.pdf", io.BytesIO(b"%PDF-1.4\nBlah blah no roll number here"), "application/pdf")
+            }
+        )
+        self.assertEqual(up_res.status_code, 200)
+
+        # Check queue
+        res = self.client.get("/api/teacher/pending-sheets", headers=headers)
+        data = res.json()
+        unid = data["unidentified_sheets"]
+        self.assertEqual(len(unid), 1)
+        # Verify it has NO assigned student
+        self.assertIsNone(unid[0]["student_id"])
+        self.assertIsNone(unid[0]["student_name"])
+
+    def test_manual_reassignment_and_order_refresh(self):
+        """Acceptance Test 4 & 5: Manual reassignment updates mapping and refreshes queue order automatically."""
+        t_res = self.client.post("/api/auth/login", json={"email": "teacher@evalai.edu", "password": "teacher123"})
+        headers = {"Authorization": f"Bearer {t_res.json()['access_token']}"}
+
+        from database import get_db
+        conn = get_db()
+        conn.execute("DELETE FROM pending_sheets")
+        conn.commit()
+        conn.close()
+
+        # Upload sheet with unreadable roll
+        up_res = self.client.post(
+            "/api/teacher/upload-sheet-auto-map",
+            headers=headers,
+            files={
+                "student_sheet": ("bad_sheet.pdf", io.BytesIO(b"%PDF-1.4\nCorrupted roll"), "application/pdf")
+            }
+        )
+        sheet_id = up_res.json()["sheet_id"]
+
+        # Reassign to Priya Singh (s2, 25ALR002)
+        reassign_res = self.client.post(
+            f"/api/teacher/pending-sheets/{sheet_id}/reassign",
+            headers=headers,
+            json={"student_id": "s2", "notes": "Identified handwriting as Priya"}
+        )
+        self.assertEqual(reassign_res.status_code, 200)
+        self.assertEqual(reassign_res.json()["student"]["roll_number"], "25ALR002")
+
+        # Verify queue order after reassignment and refresh
+        pq = self.client.get("/api/teacher/pending-sheets", headers=headers).json()
+        self.assertEqual(len(pq["identified_sheets"]), 1)
+        self.assertEqual(pq["identified_sheets"][0]["extracted_roll_number"], "25ALR002")
+        self.assertEqual(pq["identified_sheets"][0]["student_name"], "Priya Singh")
+        self.assertEqual(len(pq["identified_sheets"][0]["correction_history"]), 1)
+
+    def test_duplicate_roll_number_detection(self):
+        """Acceptance Test 6: Duplicate submissions for same roll number are flagged."""
+        t_res = self.client.post("/api/auth/login", json={"email": "teacher@evalai.edu", "password": "teacher123"})
+        headers = {"Authorization": f"Bearer {t_res.json()['access_token']}"}
+
+        from database import get_db
+        conn = get_db()
+        conn.execute("DELETE FROM pending_sheets")
+        conn.commit()
+        conn.close()
+
+        # Upload first sheet for 25ALR001
+        self.client.post(
+            "/api/teacher/upload-sheet-auto-map",
+            headers=headers,
+            files={"student_sheet": ("sheet_1.pdf", io.BytesIO(b"%PDF-1.4\nRoll No: 25ALR001"), "application/pdf")}
+        )
+        # Upload second sheet for 25ALR001
+        up2 = self.client.post(
+            "/api/teacher/upload-sheet-auto-map",
+            headers=headers,
+            files={"student_sheet": ("sheet_2.pdf", io.BytesIO(b"%PDF-1.4\nRoll No: 25ALR001"), "application/pdf")}
+        )
+        self.assertEqual(up2.status_code, 200)
+        self.assertTrue(up2.json()["is_duplicate"])
+
+        # Check queue flags
+        pq = self.client.get("/api/teacher/pending-sheets", headers=headers).json()
+        for s in pq["pending_sheets"]:
+            if s["extracted_roll_number"] == "25ALR001":
+                self.assertTrue(s["is_duplicate"])
+
+    def test_order_persistence_after_refresh(self):
+        """Acceptance Test 7: Queue order remains consistent across multiple fetches and refreshes."""
+        t_res = self.client.post("/api/auth/login", json={"email": "teacher@evalai.edu", "password": "teacher123"})
+        headers = {"Authorization": f"Bearer {t_res.json()['access_token']}"}
+
+        from database import get_db
+        conn = get_db()
+        conn.execute("DELETE FROM pending_sheets")
+        conn.commit()
+        conn.close()
+
+        for r_num in ["25ALR005", "25ALR001", "25ALR003"]:
+            self.client.post(
+                "/api/teacher/upload-sheet-auto-map",
+                headers=headers,
+                files={"student_sheet": (f"sheet_{r_num}.pdf", io.BytesIO(f"%PDF-1.4\nRoll No: {r_num}".encode()), "application/pdf")}
+            )
+
+        # 1st fetch
+        res1 = self.client.get("/api/teacher/pending-sheets", headers=headers).json()
+        rolls1 = [p["extracted_roll_number"] for p in res1["pending_sheets"]]
+
+        # 2nd fetch (simulating page reload)
+        res2 = self.client.get("/api/teacher/pending-sheets", headers=headers).json()
+        rolls2 = [p["extracted_roll_number"] for p in res2["pending_sheets"]]
+
+        self.assertEqual(rolls1, ["25ALR001", "25ALR003", "25ALR005"])
+        self.assertEqual(rolls2, ["25ALR001", "25ALR003", "25ALR005"])
+
 if __name__ == "__main__":
     unittest.main()
