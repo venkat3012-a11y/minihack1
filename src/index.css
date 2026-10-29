@@ -46,12 +46,12 @@
   }
 
   .card-flat {
-    @apply rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm transition-all duration-200;
+    @apply rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs transition-all duration-200;
   }
 
   /* Inputs & Forms */
   .form-input {
-    @apply block w-full rounded-xl border border-slate-200/90 bg-white px-3.5 py-2.5 text-xs text-slate-900 placeholder-slate-400 shadow-sm transition-all duration-200 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:bg-slate-50/70 disabled:text-slate-500;
+    @apply block w-full rounded-xl border border-slate-200/90 bg-white px-3.5 py-2.5 text-xs text-slate-900 placeholder-slate-400 shadow-xs transition-all duration-200 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-3 focus:ring-indigo-500/15 disabled:bg-slate-50/70 disabled:text-slate-500;
   }
 
   .form-label {
@@ -60,27 +60,27 @@
 
   /* Pills & Badges */
   .badge-indigo {
-    @apply inline-flex items-center gap-1 rounded-full bg-indigo-50/90 px-2.5 py-0.5 text-[11px] font-semibold text-indigo-700 border border-indigo-200/60 shadow-sm;
+    @apply inline-flex items-center gap-1 rounded-full bg-indigo-50/90 px-2.5 py-0.5 text-[11px] font-semibold text-indigo-700 border border-indigo-200/60 shadow-xs;
   }
 
   .badge-teal {
-    @apply inline-flex items-center gap-1 rounded-full bg-teal-50/90 px-2.5 py-0.5 text-[11px] font-semibold text-teal-700 border border-teal-200/60 shadow-sm;
+    @apply inline-flex items-center gap-1 rounded-full bg-teal-50/90 px-2.5 py-0.5 text-[11px] font-semibold text-teal-700 border border-teal-200/60 shadow-xs;
   }
 
   .badge-success {
-    @apply inline-flex items-center gap-1 rounded-full bg-emerald-50/90 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700 border border-emerald-200/60 shadow-sm;
+    @apply inline-flex items-center gap-1 rounded-full bg-emerald-50/90 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700 border border-emerald-200/60 shadow-xs;
   }
 
   .badge-warning {
-    @apply inline-flex items-center gap-1 rounded-full bg-amber-50/90 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800 border border-amber-200/60 shadow-sm;
+    @apply inline-flex items-center gap-1 rounded-full bg-amber-50/90 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800 border border-amber-200/60 shadow-xs;
   }
 
   .badge-danger {
-    @apply inline-flex items-center gap-1 rounded-full bg-rose-50/90 px-2.5 py-0.5 text-[11px] font-semibold text-rose-700 border border-rose-200/60 shadow-sm;
+    @apply inline-flex items-center gap-1 rounded-full bg-rose-50/90 px-2.5 py-0.5 text-[11px] font-semibold text-rose-700 border border-rose-200/60 shadow-xs;
   }
 
   .badge-neutral {
-    @apply inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-medium text-slate-600 border border-slate-200 shadow-sm;
+    @apply inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-medium text-slate-600 border border-slate-200 shadow-xs;
   }
 }
 
