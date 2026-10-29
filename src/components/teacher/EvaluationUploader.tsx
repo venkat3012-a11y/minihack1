@@ -68,12 +68,12 @@ function FileDropZone({
     <div className="flex flex-col gap-2">
       <label className="form-label">{label}</label>
       <div
-        className={`relative rounded-xl border-2 border-dashed transition-all cursor-pointer ${
+        className={`relative rounded-2xl border-2 border-dashed transition-all duration-200 cursor-pointer ${
           value.error
-            ? 'border-rose-400 bg-rose-50/40'
+            ? 'border-rose-400 bg-rose-50/50 shadow-xs'
             : value.file
-            ? 'border-emerald-400 bg-emerald-50/30'
-            : 'border-indigo-200 bg-indigo-50/20 hover:border-indigo-400 hover:bg-indigo-50/40'
+            ? 'border-emerald-400/80 bg-emerald-50/30 shadow-xs'
+            : 'border-slate-300/80 bg-slate-50/50 hover:border-indigo-400 hover:bg-indigo-50/30 hover:shadow-card'
         }`}
         onDrop={handleDrop}
         onDragOver={e => e.preventDefault()}
@@ -94,11 +94,11 @@ function FileDropZone({
               <img
                 src={value.previewUrl}
                 alt="preview"
-                className="h-20 w-20 rounded-lg object-cover border border-slate-200 shrink-0"
+                className="h-20 w-20 rounded-xl object-cover border border-slate-200 shrink-0 shadow-xs"
               />
             ) : (
-              <div className="flex h-20 w-20 items-center justify-center rounded-lg bg-indigo-100 border border-indigo-200 shrink-0">
-                <FileText className="h-8 w-8 text-indigo-600" />
+              <div className="flex h-20 w-20 items-center justify-center rounded-xl bg-indigo-50 border border-indigo-200/80 shrink-0 text-indigo-600 shadow-xs">
+                <FileText className="h-8 w-8" />
               </div>
             )}
             <div className="flex-1 min-w-0">
@@ -123,17 +123,19 @@ function FileDropZone({
                 clear()
               }}
               title="Remove file"
-              className="p-1 rounded-full hover:bg-slate-200/60 text-slate-400 hover:text-rose-600 transition-colors shrink-0"
+              className="p-1.5 rounded-full hover:bg-slate-200/60 text-slate-400 hover:text-rose-600 transition-colors shrink-0"
             >
               <X className="h-4 w-4" />
             </button>
           </div>
         ) : (
           <div className="p-8 text-center">
-            <FileUp className="h-8 w-8 text-indigo-400 mx-auto mb-2" />
+            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50/80 border border-indigo-100 text-indigo-600 shadow-xs">
+              <FileUp className="h-6 w-6" />
+            </div>
             <p className="text-sm font-semibold text-slate-700">{hint}</p>
             <p className="text-xs text-slate-400 mt-1">PDF, JPG, JPEG, PNG · Up to 30MB</p>
-            <p className="text-xs text-indigo-600 font-medium mt-2">Click to browse or drop here</p>
+            <p className="text-xs text-indigo-600 font-semibold mt-2.5">Click to browse or drop here</p>
           </div>
         )}
       </div>
@@ -291,7 +293,7 @@ export const EvaluationUploader: React.FC = () => {
       {!result && (
         <div className="card-premium space-y-6">
           <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
-            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-indigo-600 text-white text-xs font-bold">1</span>
+            <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-gradient-to-tr from-indigo-600 to-indigo-700 text-white text-xs font-bold shadow-xs">1</span>
             <div>
               <h2 className="text-base font-bold text-slate-900">Upload Three Required Documents</h2>
               <p className="text-xs text-slate-500">
@@ -446,7 +448,7 @@ export const EvaluationUploader: React.FC = () => {
       {result && !publishSuccess && (
         <div className="space-y-6">
           {/* Summary Banner */}
-          <div className="card-premium bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white border-0 flex flex-wrap items-center justify-between gap-4">
+          <div className="rounded-3xl bg-gradient-to-r from-slate-950 via-indigo-950 to-slate-900 p-6 sm:p-7 text-white shadow-xl shadow-indigo-950/20 border border-indigo-900/40 flex flex-wrap items-center justify-between gap-4">
             <div>
               <span className="badge-teal mb-1">Evaluation Generated</span>
               <h2 className="text-xl font-bold mt-1">{result.test_title}</h2>
@@ -470,7 +472,7 @@ export const EvaluationUploader: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-indigo-600 text-white text-xs font-bold">2</span>
+            <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-gradient-to-tr from-indigo-600 to-indigo-700 text-white text-xs font-bold shadow-xs">2</span>
             <div>
               <h2 className="text-base font-bold text-slate-900">Review, Correct & Approve Question-by-Question Marks</h2>
               <p className="text-xs text-slate-500">
@@ -647,9 +649,9 @@ export const EvaluationUploader: React.FC = () => {
           </div>
 
           {/* STEP 3: Teacher Comments & Final Publish */}
-          <div className="card-premium space-y-4 border-indigo-200 bg-indigo-50/20">
+          <div className="card-premium space-y-4 border-indigo-200/80 bg-indigo-50/30">
             <div className="flex items-center gap-3">
-              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-indigo-600 text-white text-xs font-bold">3</span>
+              <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-gradient-to-tr from-indigo-600 to-indigo-700 text-white text-xs font-bold shadow-xs">3</span>
               <div>
                 <h2 className="text-base font-bold text-slate-900">Approve & Publish Results to Student</h2>
                 <p className="text-xs text-slate-500">

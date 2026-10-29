@@ -108,7 +108,7 @@ export const MyResults: React.FC = () => {
         </div>
 
         {/* Score Banner */}
-        <div className="rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 text-white shadow-md flex flex-wrap items-center justify-between gap-4">
+        <div className="rounded-3xl bg-gradient-to-r from-slate-950 via-indigo-950 to-slate-900 p-6 sm:p-7 text-white shadow-xl shadow-indigo-950/20 border border-indigo-900/40 flex flex-wrap items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-2">
               <span className="rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-xs font-semibold text-emerald-300 border border-emerald-500/30">
@@ -230,15 +230,15 @@ export const MyResults: React.FC = () => {
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
       {/* Student Profile & Roll Number Banner */}
-      <div className="rounded-2xl border border-slate-200/90 bg-white p-6 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="rounded-3xl border border-slate-200/80 bg-white/95 p-6 sm:p-7 shadow-card flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-4">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-tr from-indigo-700 to-indigo-600 text-white font-bold text-xl shadow-xs">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-tr from-indigo-700 via-indigo-600 to-violet-600 text-white font-bold text-xl shadow-md shadow-indigo-500/25 ring-2 ring-indigo-500/20">
             {user?.full_name?.charAt(0) || 'S'}
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold text-slate-900">{user?.full_name}</h1>
-              <span className="rounded-md bg-indigo-50 px-2 py-0.5 text-xs font-bold text-indigo-700 border border-indigo-200 font-mono">
+              <h1 className="text-xl font-bold tracking-tight text-slate-900">{user?.full_name}</h1>
+              <span className="rounded-full bg-indigo-50 px-3 py-0.5 text-xs font-bold text-indigo-700 border border-indigo-200/80 font-mono shadow-xs">
                 {user?.roll_number || '25ALR001'}
               </span>
             </div>
@@ -250,7 +250,7 @@ export const MyResults: React.FC = () => {
 
         <button
           onClick={loadData}
-          className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 self-start sm:self-auto"
+          className="flex items-center gap-1.5 rounded-xl border border-slate-200/90 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 active:scale-95 transition-all self-start sm:self-auto"
         >
           <RefreshCw className="h-3.5 w-3.5 text-slate-500" />
           Refresh
@@ -258,7 +258,7 @@ export const MyResults: React.FC = () => {
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 rounded-lg bg-rose-50 p-3 text-xs text-rose-700 border border-rose-200">
+        <div className="flex items-center gap-2 rounded-xl bg-rose-50 p-3.5 text-xs text-rose-700 border border-rose-200 shadow-xs">
           <AlertCircle className="h-4 w-4 shrink-0" />
           <span>{error}</span>
         </div>
@@ -266,45 +266,45 @@ export const MyResults: React.FC = () => {
 
       {/* Analytics KPI Cards */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <div className="rounded-xl border border-slate-200/90 bg-white p-5 shadow-xs">
-          <div className="flex items-center justify-between text-xs font-medium text-slate-500">
+        <div className="rounded-2xl border border-slate-200/80 bg-white/95 p-5 shadow-card hover:shadow-card-hover transition-all duration-300">
+          <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-500">
             <span>Overall Score</span>
             <TrendingUp className="h-4 w-4 text-indigo-600" />
           </div>
-          <div className="mt-3 text-2xl font-bold text-indigo-700">
+          <div className="mt-3 text-2xl font-extrabold text-indigo-700">
             {dashboard?.analytics?.overall_percentage != null ? `${dashboard.analytics.overall_percentage}%` : '—'}
           </div>
           <div className="mt-1 text-xs text-slate-500">Cumulative average</div>
         </div>
 
-        <div className="rounded-xl border border-slate-200/90 bg-white p-5 shadow-xs">
-          <div className="flex items-center justify-between text-xs font-medium text-slate-500">
+        <div className="rounded-2xl border border-slate-200/80 bg-white/95 p-5 shadow-card hover:shadow-card-hover transition-all duration-300">
+          <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-500">
             <span>Grade Band</span>
             <Award className="h-4 w-4 text-emerald-600" />
           </div>
-          <div className="mt-3 text-2xl font-bold text-emerald-700">
+          <div className="mt-3 text-2xl font-extrabold text-emerald-700">
             {dashboard?.analytics?.grade_band || 'A'}
           </div>
           <div className="mt-1 text-xs text-slate-500">Performance tier</div>
         </div>
 
-        <div className="rounded-xl border border-slate-200/90 bg-white p-5 shadow-xs">
-          <div className="flex items-center justify-between text-xs font-medium text-slate-500">
+        <div className="rounded-2xl border border-slate-200/80 bg-white/95 p-5 shadow-card hover:shadow-card-hover transition-all duration-300">
+          <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-500">
             <span>Marks Earned</span>
             <CheckCircle2 className="h-4 w-4 text-teal-600" />
           </div>
-          <div className="mt-3 text-xl font-bold text-slate-900">
+          <div className="mt-3 text-xl font-extrabold text-slate-900">
             {dashboard?.analytics?.total_marks_earned != null ? `${dashboard.analytics.total_marks_earned} / ${dashboard.analytics.total_possible_marks}` : '—'}
           </div>
           <div className="mt-1 text-xs text-slate-500">Total marks accumulated</div>
         </div>
 
-        <div className="rounded-xl border border-slate-200/90 bg-white p-5 shadow-xs">
-          <div className="flex items-center justify-between text-xs font-medium text-slate-500">
+        <div className="rounded-2xl border border-slate-200/80 bg-white/95 p-5 shadow-card hover:shadow-card-hover transition-all duration-300">
+          <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-500">
             <span>Evaluated Exams</span>
             <BookOpen className="h-4 w-4 text-purple-600" />
           </div>
-          <div className="mt-3 text-2xl font-bold text-purple-700">
+          <div className="mt-3 text-2xl font-extrabold text-purple-700">
             {dashboard?.analytics?.exams_completed || results.length}
           </div>
           <div className="mt-1 text-xs text-slate-500">Published test papers</div>
