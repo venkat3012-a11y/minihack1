@@ -1,20 +1,43 @@
-# EvalAI — AI-Powered Mathematics Answer Evaluation System
+# EvalAI — AI-Powered Answer Sheet Evaluation & Personalized Learning System
 
-An automated mathematics evaluation platform where teachers upload three files and receive AI-generated proposed marks that they review and publish to students.
+An end-to-end, intelligent Mathematics evaluation and personalized learning platform. EvalAI combines Gemini Multimodal AI, SymPy symbolic verification, sequential student management, OCR-based answer sheet auto-mapping, rubric validation, class analytics, and continuous model improvement.
 
 ---
 
-## Final Workflow
+## Complete System Capabilities
 
-```
-Upload 3 Files → Gemini AI Analysis → Proposed Marks & Feedback → Teacher Review → Publish → Student Views Results
-```
-
-1. **Teacher uploads** three files: Question Paper + Teacher Answer Key + Student's Written Test  
-2. **Backend sends** files to Gemini API (multimodal) for mathematical evaluation  
-3. **Gemini + SymPy** extract questions, match student working, evaluate correctness, award partial credit  
-4. **Teacher reviews** proposed marks question-by-question, adjusts if needed, adds notes  
-5. **Teacher publishes** — student immediately sees their marks, feedback, and explanations  
+1. **Student Management & Auto-Generated Roll Numbers:**
+   - Sequential roll numbers automatically generated in the strict format `25ALR001`, `25ALR002`, `25ALR003`, etc.
+   - Guaranteed uniqueness, duplicate prevention, and historical record preservation upon deletion.
+2. **Automatic Answer-Sheet Mapping & OCR:**
+   - Extracts roll number (`25ALR###`) directly from uploaded student answer sheets (PDF, JPG, JPEG, PNG).
+   - Automatically maps answer sheets to registered students.
+   - Ambiguous or unreadable sheets are automatically routed to the **Pending Verification Queue** with OCR confidence scores for teacher resolution.
+3. **Exam & Rubric Management:**
+   - Create and manage exams with question-level rubrics, step solutions, and alternative methods.
+   - Strict server-side mathematical validation that question maximum marks sum exactly to the total exam marks.
+4. **AI Evaluation with Partial Marking & SymPy Core:**
+   - Gemini Multimodal AI extracts handwritten student steps, matches question numbers, and computes proposed marks against rubrics.
+   - Python SymPy performs symbolic verification of intermediate algebra, step validity, and alternative equivalent methods.
+   - Proportional partial credit (e.g., 2/5, 3/5) awarded for valid working with arithmetic slips; 0 marks for irrelevant work; full credit for equivalent solutions.
+   - Handwriting ambiguity warnings (e.g., `l` vs `1`, `O` vs `0`) flagged for teacher attention.
+5. **Continuous Model Improvement Pipeline:**
+   - Teacher-controlled supervised learning calibration.
+   - Automatically ingests verified evaluations, strips student PII, and deduplicates using SHA-256 hashes.
+   - Deterministic 70% Training / 15% Validation / 15% Test partitioning.
+   - Few-shot exemplar memory injected dynamically into Gemini evaluation prompts.
+   - Tracks benchmark Mean Absolute Error (MAE) and accuracy (±0.5 marks) across model versions.
+6. **Class Performance Analytics & CSV Export:**
+   - Aggregated metrics: class average, pass rate %, highest vs lowest score.
+   - Academic grade distribution: `A+` (90-100%), `A` (80-89%), `B` (65-79%), `C` (50-64%), `Needs Improvement` (<50%).
+   - Question difficulty index identifying topics where students struggled.
+   - One-click CSV export of complete evaluation and question-wise results.
+7. **Personalized Student Learning Dashboard:**
+   - Student profile with verified roll number and class affiliation.
+   - Cumulative academic analytics and performance progress tracking.
+   - Identified curriculum strengths and focus areas (weak topics).
+   - Personalized learning recommendations tailored to student error patterns.
+   - Detailed question-by-question review with model solutions, mistakes, and PDF report download.
 
 ---
 
@@ -22,27 +45,12 @@ Upload 3 Files → Gemini AI Analysis → Proposed Marks & Feedback → Teacher 
 
 | Layer | Technology | Role |
 |-------|-----------|------|
-| **Frontend** | React 18 + TypeScript + Vite + Tailwind CSS | UI for teacher upload, review, student results |
-| **Backend** | Python FastAPI + SQLite WAL | REST API, auth, file storage, evaluation orchestration |
-| **AI Evaluation** | Google Gemini API (official `google-genai` SDK) | Multimodal PDF/image analysis, mathematical evaluation |
-| **Symbolic Verification** | SymPy 1.14.0 | Algebraic equivalence, partial credit validation |
-| **PDF Export** | ReportLab | Evaluation certificates for students and teachers |
-
----
-
-## Roles
-
-### Teacher Portal
-- Upload 3 required files (Question Paper, Answer Key, Student Sheet)
-- View AI-proposed marks with question-by-question breakdown
-- Edit final marks, add teacher notes, approve and publish
-- View evaluation history with PDF export
-
-### Student Portal  
-- View **only their own** published marks (enforced on backend)
-- See question-by-question feedback, mistakes, and explanations
-- Analytics summary based on real published results
-- Download PDF report
+| **Frontend** | React 18 + TypeScript + Vite + Tailwind CSS | Teacher Portal, Student Dashboard, Analytics, Rubric Management |
+| **Backend** | Python FastAPI + SQLite WAL | REST API, role-based authorization, file handling, migrations |
+| **AI Evaluation** | Google Gemini API (official `google-genai` SDK) | Multimodal PDF/image analysis, handwriting recognition, rubric scoring |
+| **Symbolic Engine** | Python SymPy 1.14.0 | Algebraic equivalence, step proof, arithmetic slip verification |
+| **OCR & Mapping** | Regex Engine + Gemini Vision Fallback | Roll number header extraction and confidence scoring |
+| **Export Engine** | ReportLab + Python CSV | PDF certificate cards and full class data exports |
 
 ---
 
@@ -57,17 +65,17 @@ Upload 3 Files → Gemini AI Analysis → Proposed Marks & Feedback → Teacher 
 ```bash
 cd backend
 cp .env.example .env
-# Edit .env — paste your GEMINI_API_KEY
+# Edit .env and set your GEMINI_API_KEY
 ```
 
-`.env` file:
+`.env` configuration:
 ```env
-SECRET_KEY=your-secret-key-change-in-production
-GEMINI_API_KEY=your_actual_api_key_here
-GEMINI_MODEL=gemini-2.5-flash
+SECRET_KEY=your-secure-secret-key-change-in-production
+GEMINI_API_KEY=your_actual_gemini_api_key_here
+GEMINI_MODEL=gemini-3.5-flash
 ```
 
-> ⚠️ **Never commit `.env` to Git.** It is in `.gitignore`.
+> ⚠️ **Never commit `.env` to Git.** It is secured in `.gitignore`.
 
 ### 2. Install Python Dependencies
 
@@ -83,137 +91,67 @@ cd backend
 python -m uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-Backend runs at `http://127.0.0.1:8000`  
-API docs available at `http://127.0.0.1:8000/docs`
+- Backend API: `http://127.0.0.1:8000`  
+- Interactive API Docs: `http://127.0.0.1:8000/docs`
 
-### 4. Install Frontend Dependencies
+### 4. Install Frontend Dependencies & Start
 
 ```bash
 npm install
-```
-
-### 5. Start Frontend Dev Server
-
-```bash
 npm run dev
 ```
 
-Frontend runs at `http://localhost:5173` (proxies `/api` to port 8000)
+Frontend runs at `http://localhost:5173` (or `5174`).
 
 ---
 
-## Demo Accounts (Pre-seeded)
+## Pre-Seeded Demo Accounts
 
-| Role | Email | Password |
-|------|-------|----------|
-| Teacher | `teacher@evalai.edu` | `teacher123` |
-| Student | `aarav@evalai.edu` | `student123` |
-| Student | `priya@evalai.edu` | `student123` |
-| Student | `rohan@evalai.edu` | `student123` |
-
----
-
-## API Key & Model Configuration
-
-The Gemini API key is **read exclusively from the backend environment**. It is **never exposed to the frontend**.
-
-```python
-# backend/gemini_service.py
-api_key = os.environ.get("GEMINI_API_KEY", "").strip()
-model_id = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash").strip()
-```
-
-If `GEMINI_API_KEY` is not set, the system falls back to a deterministic SymPy-only local evaluation engine — no AI but still functional.
-
-**Verified model ID:** `gemini-2.5-flash` (confirmed from Google Gemini API documentation and SDK)
+| Role | Name | Roll Number / Class | Email | Password |
+|------|------|---------------------|-------|----------|
+| **Teacher** | Dr. Sarah Sharma | Mathematics Faculty | `teacher@evalai.edu` | `teacher123` |
+| **Student** | Aarav Patel | `25ALR001` (Class 10) | `aarav@evalai.edu` | `student123` |
+| **Student** | Priya Sharma | `25ALR002` (Class 10) | `priya@evalai.edu` | `student123` |
+| **Student** | Rohan Gupta | `25ALR003` (Class 10) | `rohan@evalai.edu` | `student123` |
 
 ---
 
-## File Upload Specifications
+## Test Suites & Verification
 
-| Parameter | Value |
-|-----------|-------|
-| Supported formats | PDF, JPG, JPEG, PNG |
-| Maximum file size | 30 MB per file |
-| Files required | All 3 must be present before evaluation |
+### Run All 30 Automated Backend Tests
 
----
-
-## Backend API Endpoints
-
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| `POST` | `/api/auth/login` | None | Login |
-| `POST` | `/api/auth/register` | None | Register |
-| `GET` | `/api/auth/me` | Bearer | Current user |
-| `GET` | `/api/teacher/students` | Teacher | List students |
-| `POST` | `/api/teacher/evaluate-three-files` | Teacher | Upload 3 files and evaluate |
-| `GET` | `/api/teacher/evaluations` | Teacher | List all evaluations |
-| `GET` | `/api/teacher/evaluations/{id}` | Teacher | Evaluation detail |
-| `PUT` | `/api/teacher/evaluations/{id}/publish` | Teacher | Publish marks |
-| `GET` | `/api/student/my-results` | Student | Own published results |
-| `GET` | `/api/student/my-results/{id}` | Student | Single result detail |
-| `GET` | `/api/export/pdf/{id}` | Either | PDF report |
-| `GET` | `/api/health` | None | System health check |
-
----
-
-## Running Tests
-
-### Backend Math Engine Tests (9 unit tests)
 ```bash
 cd backend
-python test_math_engine.py
+python -m unittest test_api_endpoints.py test_math_engine.py
 ```
 
-### Backend Import Verification
-```bash
-cd backend
-python test_imports.py
+Result:
+```text
+Ran 30 tests in 6.407s
+OK
 ```
+
+- **`test_api_endpoints.py` (21 tests):**
+  - Student roster CRUD, sequential `25ALR###` roll number generation, duplicate prevention, and deletion protection.
+  - Exam creation, rubric validation, and marks summation checks.
+  - Automatic roll number OCR extraction, sheet mapping, and pending queue resolution.
+  - Continuous AI improvement pipeline (70/15/15 splits, MAE benchmark calculation, version logging).
+  - Class analytics summary and CSV export.
+  - Student dashboard isolation and personalized analytics.
+- **`test_math_engine.py` (9 tests):**
+  - SymPy symbolic verification, equivalent expressions, quadratic equations, and partial credit scoring.
 
 ### Frontend TypeScript Build
+
 ```bash
 npm run build
 ```
 
----
-
-## Security
-
-- JWT tokens signed with HMAC-SHA256 (no third-party JWT library required)
-- Passwords hashed with PBKDF2-SHA256 + random salt (100,000 iterations)
-- Students can only access their own published evaluations (enforced by backend query)
-- `.env` is in `.gitignore` — API key never in source code or frontend bundle
-- File uploads validated: type, extension, size limit, empty-file check
-- Directory traversal prevented in `/api/storage/{filename}` endpoint
+Result: `✓ built in 3.37s` with zero TypeScript errors.
 
 ---
 
-## Evaluation Engine Logic
+## Git Repositories
 
-1. **Gemini Multimodal Analysis:** Files are uploaded via `client.files.upload()` and sent as multimodal parts to `client.models.generate_content()` with a structured JSON response schema
-2. **SymPy Validation:** After Gemini proposes scores, SymPy verifies mathematical steps for algebraic correctness, adds any missed errors to the `mistakes` list
-3. **Partial Credit:** Valid methods with arithmetic slips earn method marks even if the final answer is wrong
-4. **Alternative Methods:** Commutative/equivalent solutions are flagged as accepted (`alternative_method: true`)
-5. **Ambiguity Flagging:** Unclear handwriting (l vs 1, O vs 0) is flagged in `flagged_ambiguity` for teacher review
-6. **Fallback:** If Gemini is unavailable, local SymPy-only engine processes text extracted from files
-
----
-
-## Supported Question Types (Mathematics Only)
-
-- Arithmetic & Fractions: `3/4 - 5/6 = -1/12`
-- Linear Equations: `2x + 5 = 15 → x = 5`
-- Polynomial Factorization: `x² + 5x + 6 → (x+2)(x+3)`
-- Quadratic Equations: solving with factoring or quadratic formula
-- Arithmetic Progressions: Tₙ = a + (n-1)d
-
----
-
-## Development Notes
-
-- Frontend build: `npm run build` (TypeScript + Vite)
-- Backend database: SQLite with WAL mode at `backend/evalai.db` (auto-initialized on startup)
-- Uploaded files stored in `backend/storage/` (git-ignored)
-- ML/OCR dependencies (EasyOCR, TrOCR, torch) are **optional** and commented out in `requirements.txt` — Gemini handles file analysis directly
+- **Private Repository:** `https://github.com/venkat3012-a11y/minihack`
+- **Secondary Repository:** `https://github.com/venkat3012-a11y/minihack1`
