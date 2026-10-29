@@ -74,17 +74,6 @@ export interface Exam {
   created_at?: string
 }
 
-export interface CorrectionHistoryEntry {
-  reassigned_by: string
-  reassigned_by_id?: string
-  previous_roll?: string
-  new_roll: string
-  student_id: string
-  student_name: string
-  notes?: string
-  timestamp: string
-}
-
 export interface PendingSheet {
   id: string
   exam_id?: string
@@ -95,13 +84,6 @@ export interface PendingSheet {
   ocr_confidence: number
   status: 'pending' | 'resolved' | 'rejected'
   error_reason?: string
-  student_id?: string
-  student_name?: string
-  db_student_name?: string
-  db_student_email?: string
-  is_duplicate?: number | boolean
-  duplicate_reason?: string
-  correction_history?: CorrectionHistoryEntry[]
   created_at: string
 }
 
@@ -347,44 +329,8 @@ export const api = {
     })
   },
 
-  async getPendingSheets(): Promise<{
-    pending_sheets: PendingSheet[]
-    identified_sheets?: PendingSheet[]
-    unidentified_sheets?: PendingSheet[]
-    count: number
-  }> {
-    return request('/api/teacher/pending-sheets')
-  },
-
-  async reassignPendingSheet(sheetId: string, studentId: string, notes?: string): Promise<{
-    ok: boolean
-    message: string
-    sheet_id: string
-    student: User
-    roll_number: string
-  }> {
-    return request(`/api/teacher/pending-sheets/${sheetId}/reassign`, {
-      method: 'POST',
-      body: JSON.stringify({ student_id: studentId, notes })
-    })
-  },
-
-  async uploadSheetsBatch(files: File[], examId?: string): Promise<{
-    ok: boolean
-    uploaded_count: number
-    pending_sheets: PendingSheet[]
-    identified_sheets?: PendingSheet[]
-    unidentified_sheets?: PendingSheet[]
-    count: number
-  }> {
-    const fd = new FormData()
-    files.forEach(f => fd.append('student_sheets', f))
-    if (examId) fd.append('exam_id', examId)
-
-    return request('/api/teacher/upload-sheets-batch', {
-      method: 'POST',
-      body: fd
-    })
+  async getPendingSheets(): Promise<{ pending_sheets: PendingSheet[]; count: number }> {
+    return request<{ pending_sheets: PendingSheet[]; count: number }>('/api/teacher/pending-sheets')
   },
 
   async resolvePendingSheet(sheetId: string, data: { student_id?: string; roll_number?: string }): Promise<{ ok: boolean; message: string; student: User; storage_filename: string }> {

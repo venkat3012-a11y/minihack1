@@ -1,6 +1,5 @@
 import sqlite3
 import os
-import re
 import json
 import hashlib
 import binascii
@@ -133,27 +132,8 @@ def init_db():
         ocr_confidence REAL DEFAULT 0.0,
         status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'resolved', 'rejected')),
         error_reason TEXT,
-        student_id TEXT,
-        student_name TEXT,
-        is_duplicate INTEGER DEFAULT 0,
-        duplicate_reason TEXT,
-        correction_history TEXT,
         created_at TEXT NOT NULL
     )""")
-
-    # Safe migrations for pending_sheets table
-    c.execute("PRAGMA table_info(pending_sheets)")
-    ps_cols = [r["name"] for r in c.fetchall()]
-    if "student_id" not in ps_cols:
-        c.execute("ALTER TABLE pending_sheets ADD COLUMN student_id TEXT")
-    if "student_name" not in ps_cols:
-        c.execute("ALTER TABLE pending_sheets ADD COLUMN student_name TEXT")
-    if "is_duplicate" not in ps_cols:
-        c.execute("ALTER TABLE pending_sheets ADD COLUMN is_duplicate INTEGER DEFAULT 0")
-    if "duplicate_reason" not in ps_cols:
-        c.execute("ALTER TABLE pending_sheets ADD COLUMN duplicate_reason TEXT")
-    if "correction_history" not in ps_cols:
-        c.execute("ALTER TABLE pending_sheets ADD COLUMN correction_history TEXT")
 
     # Model Training / Improvement Examples (Teacher-verified ground truth)
     c.execute("""
@@ -204,39 +184,6 @@ def init_db():
 
     conn.commit()
     conn.close()
-
-def extract_numeric_roll(roll: Optional[str]) -> Optional[int]:
-    """
-    Extracts the numeric sequence from a roll number (e.g. '25ALR002' -> 2, '25ALR010' -> 10).
-    Returns None if no numeric sequence is present.
-    """
-    if not roll or not str(roll).strip():
-        return None
-    cleaned = str(roll).strip().upper()
-    m = re.search(r"ALR\s*[-_.]?\s*(\d+)", cleaned)
-    if m:
-        try:
-            return int(m.group(1))
-        except ValueError:
-            pass
-    digits = re.findall(r"\d+", cleaned)
-    if digits:
-        try:
-            return int(digits[-1])
-        except ValueError:
-            pass
-    return None
-
-def roll_number_sort_key(roll: Optional[str]) -> Tuple[int, int, str]:
-    """
-    Natural numeric sort key for roll numbers.
-    - Identifiable roll numbers (Category 0) sort strictly by numeric integer value (2 before 10).
-    - Unidentifiable / missing roll numbers (Category 1) are placed after all identifiable ones.
-    """
-    num = extract_numeric_roll(roll)
-    if num is not None:
-        return (0, num, str(roll).strip().upper())
-    return (1, 999999999, "")
 
 def get_next_roll_number() -> str:
     """

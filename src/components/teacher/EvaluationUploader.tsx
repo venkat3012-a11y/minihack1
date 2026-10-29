@@ -169,10 +169,11 @@ export const EvaluationUploader: React.FC = () => {
       api.getTeacherStudents().catch(() => ({ students: [] })),
       api.getExams().catch(() => ({ exams: [] }))
     ]).then(([studRes, examRes]) => {
-      const studs = (studRes.students || []).slice().sort((a: User, b: User) => {
-        const numA = parseInt((a.roll_number || '').replace(/\D/g, ''), 10) || 0
-        const numB = parseInt((b.roll_number || '').replace(/\D/g, ''), 10) || 0
-        return numA - numB
+      // Naturally sort students by sequential roll number (e.g. 25ALR001, 25ALR002, 25ALR003)
+      const studs = (studRes.students || []).slice().sort((a, b) => {
+        const rollA = a.roll_number || ''
+        const rollB = b.roll_number || ''
+        return rollA.localeCompare(rollB, undefined, { numeric: true, sensitivity: 'base' })
       })
       setStudents(studs)
       setExams(examRes.exams || [])
@@ -223,6 +224,14 @@ export const EvaluationUploader: React.FC = () => {
       setResult(evalResult)
       setEditedQuestions(JSON.parse(JSON.stringify(evalResult.questions || [])))
       setTeacherComments('')
+
+      // Automatically advance TARGET STUDENT to the next sequential roll number (e.g. 001 -> 002 -> 003)
+      const currentIdx = students.findIndex(s => s.id === selectedStudentId)
+      if (currentIdx >= 0 && currentIdx < students.length - 1) {
+        setSelectedStudentId(students[currentIdx + 1].id)
+      } else if (students.length > 0) {
+        setSelectedStudentId(students[0].id)
+      }
     } catch (err) {
       setApiError((err as Error).message || 'Evaluation failed. Please verify files and try again.')
     } finally {
