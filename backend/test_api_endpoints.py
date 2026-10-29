@@ -22,7 +22,7 @@ class TestApiEndpoints(unittest.TestCase):
         self.assertTrue(data["ok"])
         self.assertEqual(data["subject"], "Mathematics")
         self.assertEqual(data["symbolic_engine"], "SymPy 1.14.0")
-        self.assertIn(data["model"], ["gemini-3.8-flash", "gemini-2.5-flash"])
+        self.assertIn(data["model"], ["gemini-3.5-flash", "gemini-3.8-flash", "gemini-2.5-flash"])
 
     def test_teacher_login(self):
         res = self.client.post("/api/auth/login", json={"email": "teacher@evalai.edu", "password": "teacher123"})

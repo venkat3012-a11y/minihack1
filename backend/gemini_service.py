@@ -22,14 +22,15 @@ from ocr_service import extract_pdf_content, ocr_image, split_answers_by_questio
 
 # Verified supported Gemini models
 SUPPORTED_GEMINI_MODELS = {
+    "gemini-3.5-flash",
+    "gemini-3.5-flash-lite",
     "gemini-3.8-flash",
+    "gemini-3.1-flash-lite",
     "gemini-2.5-flash",
-    "gemini-2.0-flash",
-    "gemini-1.5-flash",
-    "gemini-1.5-pro"
+    "gemini-2.5-pro"
 }
 
-DEFAULT_MODEL = "gemini-3.8-flash"
+DEFAULT_MODEL = "gemini-3.5-flash"
 
 def get_gemini_config() -> Dict[str, str]:
     api_key = os.environ.get("GEMINI_API_KEY", "").strip("\"' ")
@@ -135,27 +136,26 @@ def evaluate_with_gemini_multimodal(
 ) -> Dict[str, Any]:
     """
     Sends the 3 documents to Gemini using the official Google Gen AI SDK.
-    Supports multi-page PDFs, PNGs, and JPEGs.
-    Validates output schema, cross-checks with SymPy, and cleans up uploaded files.
+    Uses direct inline bytes (types.Part.from_bytes) for instantaneous multimodal delivery.
+    Supports multi-page PDFs, PNGs, and JPEGs with automatic model resilience.
     """
     from google import genai
     from google.genai import types
 
     client = genai.Client(api_key=api_key)
-    uploaded_files = []
 
-    try:
-        # Upload files using client.files.upload for full multi-page support
-        qp_file = client.files.upload(file=qp_path)
-        uploaded_files.append(qp_file)
+    with open(qp_path, "rb") as f:
+        qp_bytes = f.read()
+    with open(ak_path, "rb") as f:
+        ak_bytes = f.read()
+    with open(ss_path, "rb") as f:
+        ss_bytes = f.read()
 
-        ak_file = client.files.upload(file=ak_path)
-        uploaded_files.append(ak_file)
+    qp_part = types.Part.from_bytes(data=qp_bytes, mime_type=get_mime_type(qp_path))
+    ak_part = types.Part.from_bytes(data=ak_bytes, mime_type=get_mime_type(ak_path))
+    ss_part = types.Part.from_bytes(data=ss_bytes, mime_type=get_mime_type(ss_path))
 
-        ss_file = client.files.upload(file=ss_path)
-        uploaded_files.append(ss_file)
-
-        prompt = f"""
+    prompt = f"""
 You are an expert Mathematics Evaluator and Grader.
 You are given three documents:
 Document 1: Question Paper
@@ -198,54 +198,59 @@ Respond ONLY with a valid JSON object matching this exact schema:
 }}
 """
 
-        # Retry once on transient failures
-        last_exc = None
-        response = None
-        for attempt in range(2):
-            try:
-                response = client.models.generate_content(
-                    model=model_name,
-                    contents=[
-                        types.Part.from_text(text="DOCUMENT 1 - QUESTION PAPER:"),
-                        qp_file,
-                        types.Part.from_text(text="DOCUMENT 2 - TEACHER ANSWER KEY:"),
-                        ak_file,
-                        types.Part.from_text(text="DOCUMENT 3 - STUDENT WRITTEN TEST PAPER:"),
-                        ss_file,
-                        types.Part.from_text(text=prompt)
-                    ],
-                    config=types.GenerateContentConfig(
-                        response_mime_type="application/json"
-                    )
-                )
-                break
-            except Exception as e:
-                last_exc = e
-                if attempt == 0:
-                    time.sleep(2)
-                else:
-                    raise last_exc
+    contents = [
+        types.Part.from_text(text="DOCUMENT 1 - QUESTION PAPER:"),
+        qp_part,
+        types.Part.from_text(text="DOCUMENT 2 - TEACHER ANSWER KEY:"),
+        ak_part,
+        types.Part.from_text(text="DOCUMENT 3 - STUDENT WRITTEN TEST PAPER:"),
+        ss_part,
+        types.Part.from_text(text=prompt)
+    ]
+    gen_config = types.GenerateContentConfig(
+        response_mime_type="application/json"
+    )
 
-        raw_text = response.text.strip() if response and response.text else "{}"
-        # Clean potential markdown fences
-        if raw_text.startswith("```json"):
-            raw_text = raw_text[7:]
-        if raw_text.startswith("```"):
-            raw_text = raw_text[3:]
-        if raw_text.endswith("```"):
-            raw_text = raw_text[:-3]
+    # Models to attempt in order of preference and resilience
+    candidate_models = [model_name]
+    for alt in ["gemini-3.5-flash", "gemini-3.5-flash-lite"]:
+        if alt not in candidate_models:
+            candidate_models.append(alt)
 
-        parsed = json.loads(raw_text.strip())
-        if not isinstance(parsed, dict) or "questions" not in parsed:
-            raise ValueError("Gemini response missing 'questions' schema.")
+    response = None
+    last_exc = None
+    successful_model = model_name
 
-    finally:
-        # Clean up temporary uploaded files from Gemini storage
-        for f in uploaded_files:
-            try:
-                client.files.delete(name=f.name)
-            except Exception:
-                pass
+    for m in candidate_models:
+        try:
+            print(f"Calling Gemini with model '{m}'...", flush=True)
+            response = client.models.generate_content(
+                model=m,
+                contents=contents,
+                config=gen_config
+            )
+            successful_model = m
+            break
+        except Exception as e:
+            last_exc = e
+            print(f"Model '{m}' call failed ({e}). Trying next resilient model if available...", flush=True)
+            continue
+
+    if not response:
+        raise last_exc or RuntimeError("All candidate Gemini models failed to generate content.")
+
+    raw_text = response.text.strip() if response and response.text else "{}"
+    # Clean potential markdown fences
+    if raw_text.startswith("```json"):
+        raw_text = raw_text[7:]
+    if raw_text.startswith("```"):
+        raw_text = raw_text[3:]
+    if raw_text.endswith("```"):
+        raw_text = raw_text[:-3]
+
+    parsed = json.loads(raw_text.strip())
+    if not isinstance(parsed, dict) or "questions" not in parsed:
+        raise ValueError("Gemini response missing 'questions' schema.")
 
     # Server-side validation, recalculation & SymPy enrichment
     validated_questions = []
@@ -329,7 +334,7 @@ Respond ONLY with a valid JSON object matching this exact schema:
         "total_final_score": round(total_proposed, 2),
         "max_score": round(total_max, 2),
         "questions": validated_questions,
-        "engine": f"Gemini ({model_name}) + SymPy Symbolic Core",
+        "engine": f"Gemini ({successful_model}) + SymPy Symbolic Core",
         "fallback_used": False
     }
 

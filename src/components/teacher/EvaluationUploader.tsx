@@ -323,22 +323,33 @@ export const EvaluationUploader: React.FC = () => {
 
           {/* Upload Progress Bar */}
           {uploading && (
-            <div className="space-y-2 rounded-lg bg-indigo-50/60 border border-indigo-100 p-4">
+            <div className="space-y-3 rounded-xl bg-indigo-50/80 border border-indigo-200 p-4">
               <div className="flex items-center justify-between text-xs font-semibold text-indigo-900">
                 <span className="flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin text-indigo-600" />
-                  Uploading 3 documents and running AI multimodal evaluation…
+                  <Loader2 className="h-4 w-4 animate-spin text-indigo-600 shrink-0" />
+                  {uploadPct < 90
+                    ? `Uploading 3 documents to server… (${uploadPct}%)`
+                    : 'Documents uploaded. Gemini AI is analyzing questions, handwriting & marking rubrics…'}
                 </span>
-                <span className="font-bold text-indigo-700">{uploadPct}%</span>
+                <span className="font-bold text-indigo-700 font-mono">
+                  {uploadPct < 90 ? `${uploadPct}%` : 'Processing…'}
+                </span>
               </div>
-              <div className="h-2 rounded-full bg-indigo-200 overflow-hidden">
+              <div className="h-2.5 rounded-full bg-indigo-200 overflow-hidden">
                 <div
-                  className="h-full bg-indigo-600 rounded-full transition-all duration-300"
-                  style={{ width: `${uploadPct}%` }}
+                  className={`h-full bg-indigo-600 rounded-full transition-all duration-300 ${
+                    uploadPct >= 90 ? 'animate-pulse' : ''
+                  }`}
+                  style={{ width: `${Math.max(uploadPct, 92)}%` }}
                 />
               </div>
-              <p className="text-[11px] text-slate-500">
-                Extracting questions, verifying working steps with SymPy, matching rubrics, and computing proposed marks.
+              <p className="text-[11px] text-slate-600 flex items-center justify-between">
+                <span>
+                  {uploadPct < 90
+                    ? 'Transferring Question Paper, Answer Key, and Student Written Test.'
+                    : 'Multimodal AI extraction + SymPy step verification in progress (typically 10–25s).'}
+                </span>
+                <span className="text-indigo-600 font-medium">Please wait…</span>
               </p>
             </div>
           )}
